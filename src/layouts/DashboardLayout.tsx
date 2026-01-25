@@ -10,7 +10,6 @@ import {
   SidebarMenuButton,
   SidebarProvider,
   SidebarTrigger,
-  useSidebar
 } from '@/components/ui/sidebar';
 import { NavLink } from '@/components/NavLink';
 import { 
@@ -20,13 +19,13 @@ import {
   LogOut, 
   Zap,
   Menu,
-  ChevronLeft,
   ArrowRightLeft,
   Bell
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
+import { ThemeToggle } from '@/components/ThemeToggle';
 
 const navItems = [
   { title: 'Dashboard', url: '/dashboard', icon: LayoutDashboard },
@@ -118,6 +117,7 @@ function DashboardHeader() {
       </div>
 
       <div className="flex items-center gap-4">
+        <ThemeToggle />
         <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-foreground">
           <Bell className="h-5 w-5" />
         </Button>

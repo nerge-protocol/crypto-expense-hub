@@ -4,11 +4,13 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
+import { useTheme } from "@/hooks/useTheme";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import Payments from "./pages/Payments";
 import Settlements from "./pages/Settlements";
 import Settings from "./pages/Settings";
+import Checkout from "./pages/Checkout";
 import DashboardLayout from "./layouts/DashboardLayout";
 import NotFound from "./pages/NotFound";
 
@@ -19,8 +21,9 @@ function AppRoutes() {
 
   return (
     <Routes>
-      {/* Public route - Login */}
+      {/* Public routes */}
       <Route path="/" element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <Login />} />
+      <Route path="/checkout" element={<Checkout />} />
       
       {/* Protected routes - Dashboard */}
       <Route element={<DashboardLayout />}>
@@ -36,15 +39,23 @@ function AppRoutes() {
   );
 }
 
+function ThemeInitializer({ children }: { children: React.ReactNode }) {
+  // Initialize theme on mount
+  useTheme();
+  return <>{children}</>;
+}
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <BrowserRouter>
-        <AppRoutes />
-      </BrowserRouter>
-    </TooltipProvider>
+    <ThemeInitializer>
+      <TooltipProvider>
+        <Toaster />
+        <Sonner />
+        <BrowserRouter>
+          <AppRoutes />
+        </BrowserRouter>
+      </TooltipProvider>
+    </ThemeInitializer>
   </QueryClientProvider>
 );
 
