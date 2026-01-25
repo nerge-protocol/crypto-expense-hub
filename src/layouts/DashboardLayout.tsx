@@ -27,9 +27,12 @@ import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import { ThemeToggle } from '@/components/ThemeToggle';
 
+import { Link } from 'lucide-react';
+
 const navItems = [
   { title: 'Dashboard', url: '/dashboard', icon: LayoutDashboard },
   { title: 'Payments', url: '/payments', icon: CreditCard },
+  { title: 'Payment Links', url: '/payment-links', icon: Link },
   { title: 'Settlements', url: '/settlements', icon: ArrowRightLeft },
   { title: 'Settings', url: '/settings', icon: Settings },
 ];

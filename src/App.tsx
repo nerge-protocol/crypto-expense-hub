@@ -10,6 +10,7 @@ import Dashboard from "./pages/Dashboard";
 import Payments from "./pages/Payments";
 import Settlements from "./pages/Settlements";
 import Settings from "./pages/Settings";
+import PaymentLinks from "./pages/PaymentLinks";
 import Checkout from "./pages/Checkout";
 import DashboardLayout from "./layouts/DashboardLayout";
 import NotFound from "./pages/NotFound";
@@ -29,6 +30,7 @@ function AppRoutes() {
       <Route element={<DashboardLayout />}>
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/payments" element={<Payments />} />
+        <Route path="/payment-links" element={<PaymentLinks />} />
         <Route path="/settlements" element={<Settlements />} />
         <Route path="/settings" element={<Settings />} />
       </Route>
