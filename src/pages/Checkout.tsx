@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Wallet, Copy, Check, AlertCircle, Loader2, ExternalLink, X } from 'lucide-react';
+import { Wallet, Copy, Check, AlertCircle, Loader2, ExternalLink, X, CheckCircle2 } from 'lucide-react';
+import { useWallet, WalletType, ChainType as WalletChainType } from '@/hooks/useWallet';
 import { ChainType } from '@/types/merchant';
+import { toast } from 'sonner';
 
 interface PaymentData {
   merchantName: string;
@@ -25,12 +27,14 @@ interface Chain {
   icon: string;
   fee: string;
   popular?: boolean;
+  wallets: { type: WalletType; name: string; icon: string; color: string }[];
 }
 
 type Step = 'initial' | 'wallet-connect' | 'payment' | 'processing' | 'success' | 'failed';
 
 const Checkout = () => {
   const [searchParams] = useSearchParams();
+  const wallet = useWallet();
   
   // Parse URL parameters
   const urlAmount = searchParams.get('amount');
@@ -59,11 +63,50 @@ const Checkout = () => {
     }
   }), [urlAmount, urlCurrency, urlRef, urlDesc, urlEmail]);
 
+  // Chain configurations with available wallets
   const chains: Chain[] = [
-    { id: 'tron', name: 'Tron (TRC20)', icon: '🔷', fee: 'Low (~$2)', popular: !urlChain || urlChain === 'tron' },
-    { id: 'base', name: 'Base', icon: '🔵', fee: 'Very Low (~$0.30)', popular: urlChain === 'base' },
-    { id: 'arbitrum', name: 'Arbitrum', icon: '🔴', fee: 'Low (~$0.50)', popular: urlChain === 'arbitrum' },
-    { id: 'solana', name: 'Solana', icon: '🟣', fee: 'Extremely Low (~$0.0001)', popular: urlChain === 'solana' }
+    { 
+      id: 'tron', 
+      name: 'Tron (TRC20)', 
+      icon: '🔷', 
+      fee: 'Low (~$2)', 
+      popular: !urlChain || urlChain === 'tron',
+      wallets: [
+        { type: 'tronlink' as WalletType, name: 'TronLink', icon: '🔷', color: 'bg-red-500' },
+      ]
+    },
+    { 
+      id: 'base', 
+      name: 'Base', 
+      icon: '🔵', 
+      fee: 'Very Low (~$0.30)', 
+      popular: urlChain === 'base',
+      wallets: [
+        { type: 'metamask' as WalletType, name: 'MetaMask', icon: '🦊', color: 'bg-orange-500' },
+        { type: 'trustwallet' as WalletType, name: 'Trust Wallet', icon: '🛡️', color: 'bg-blue-500' },
+      ]
+    },
+    { 
+      id: 'arbitrum', 
+      name: 'Arbitrum', 
+      icon: '🔴', 
+      fee: 'Low (~$0.50)', 
+      popular: urlChain === 'arbitrum',
+      wallets: [
+        { type: 'metamask' as WalletType, name: 'MetaMask', icon: '🦊', color: 'bg-orange-500' },
+        { type: 'trustwallet' as WalletType, name: 'Trust Wallet', icon: '🛡️', color: 'bg-blue-500' },
+      ]
+    },
+    { 
+      id: 'solana', 
+      name: 'Solana', 
+      icon: '🟣', 
+      fee: 'Extremely Low (~$0.0001)', 
+      popular: urlChain === 'solana',
+      wallets: [
+        { type: 'phantom' as WalletType, name: 'Phantom', icon: '👻', color: 'bg-purple-500' },
+      ]
+    }
   ];
 
   // Pre-select chain if provided in URL
@@ -71,7 +114,6 @@ const Checkout = () => {
 
   const [step, setStep] = useState<Step>('initial');
   const [selectedChain, setSelectedChain] = useState<Chain | null>(preSelectedChain);
-  const [selectedWallet, setSelectedWallet] = useState<string | null>(null);
   const [escrowCreated, setEscrowCreated] = useState(false);
   const [txHash, setTxHash] = useState('');
   const [copied, setCopied] = useState(false);
@@ -97,25 +139,62 @@ const Checkout = () => {
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  const connectWallet = async (walletType: string) => {
-    setSelectedWallet(walletType);
-    setStep('payment');
-    await new Promise(resolve => setTimeout(resolve, 1000));
+  const connectWallet = async (walletType: WalletType) => {
+    if (!selectedChain) return;
+    
+    const success = await wallet.connect(walletType, selectedChain.id as WalletChainType);
+    if (success) {
+      setStep('payment');
+    }
   };
 
   const handlePayment = async () => {
+    if (!wallet.isConnected || !wallet.address) {
+      toast.error('Please connect your wallet first');
+      return;
+    }
+
     setStep('processing');
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    setEscrowCreated(true);
-    setTxHash('0x' + Math.random().toString(36).substring(2, 15));
-    await new Promise(resolve => setTimeout(resolve, 3000));
-    setStep('success');
+    
+    try {
+      // Simulate escrow creation
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      setEscrowCreated(true);
+      
+      // Generate mock transaction hash
+      const mockTxHash = '0x' + Array.from({ length: 64 }, () => 
+        Math.floor(Math.random() * 16).toString(16)
+      ).join('');
+      setTxHash(mockTxHash);
+      
+      // Simulate payment processing
+      await new Promise(resolve => setTimeout(resolve, 3000));
+      setStep('success');
+      
+      toast.success('Payment completed successfully!');
+    } catch (error) {
+      console.error('Payment error:', error);
+      setStep('failed');
+      toast.error('Payment failed. Please try again.');
+    }
   };
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
     setCopied(true);
+    toast.success('Copied to clipboard');
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const getBlockExplorerUrl = (chain: Chain | null, hash: string) => {
+    if (!chain) return '#';
+    switch (chain.id) {
+      case 'tron': return `https://tronscan.org/#/transaction/${hash}`;
+      case 'base': return `https://basescan.org/tx/${hash}`;
+      case 'arbitrum': return `https://arbiscan.io/tx/${hash}`;
+      case 'solana': return `https://solscan.io/tx/${hash}`;
+      default: return '#';
+    }
   };
 
   if (!isOpen) {
@@ -247,7 +326,10 @@ const Checkout = () => {
           {step === 'wallet-connect' && (
             <div className="space-y-4 animate-slide-up">
               <button
-                onClick={() => setStep('initial')}
+                onClick={() => {
+                  wallet.disconnect();
+                  setStep('initial');
+                }}
                 className="text-sm text-muted-foreground hover:text-foreground flex items-center gap-1"
               >
                 ← Back to networks
@@ -266,45 +348,77 @@ const Checkout = () => {
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <button
-                  onClick={() => connectWallet('metamask')}
-                  className="w-full p-4 rounded-xl border-2 border-border hover:border-primary hover:bg-primary/5 transition-all flex items-center justify-between"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-orange-500 rounded-lg flex items-center justify-center text-white font-bold">
-                      M
-                    </div>
-                    <span className="font-semibold text-foreground">MetaMask</span>
+              {/* Connected wallet display */}
+              {wallet.isConnected && wallet.address && (
+                <div className="bg-success/10 border border-success/20 rounded-xl p-4">
+                  <div className="flex items-center gap-2 text-success text-sm mb-2">
+                    <CheckCircle2 size={16} />
+                    <span className="font-medium">Wallet Connected</span>
                   </div>
-                  <Wallet size={20} className="text-muted-foreground" />
-                </button>
+                  <div className="text-xs text-success/80 font-mono break-all">
+                    {wallet.address}
+                  </div>
+                  <button
+                    onClick={() => setStep('payment')}
+                    className="mt-3 w-full gradient-primary text-primary-foreground py-2 rounded-lg font-medium text-sm"
+                  >
+                    Continue to Payment
+                  </button>
+                </div>
+              )}
 
-                <button
-                  onClick={() => connectWallet('trustwallet')}
-                  className="w-full p-4 rounded-xl border-2 border-border hover:border-primary hover:bg-primary/5 transition-all flex items-center justify-between"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-blue-500 rounded-lg flex items-center justify-center text-white font-bold">
-                      T
-                    </div>
-                    <span className="font-semibold text-foreground">Trust Wallet</span>
-                  </div>
-                  <Wallet size={20} className="text-muted-foreground" />
-                </button>
+              {/* Wallet options */}
+              {!wallet.isConnected && (
+                <div className="space-y-2">
+                  {selectedChain?.wallets.map((w) => (
+                    <button
+                      key={w.type}
+                      onClick={() => connectWallet(w.type)}
+                      disabled={wallet.isConnecting}
+                      className="w-full p-4 rounded-xl border-2 border-border hover:border-primary hover:bg-primary/5 transition-all flex items-center justify-between disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className={`w-10 h-10 ${w.color} rounded-lg flex items-center justify-center text-white text-xl`}>
+                          {w.icon}
+                        </div>
+                        <div className="text-left">
+                          <span className="font-semibold text-foreground block">{w.name}</span>
+                          <span className="text-xs text-muted-foreground">
+                            {w.type === 'metamask' && 'Browser extension'}
+                            {w.type === 'trustwallet' && 'Mobile wallet'}
+                            {w.type === 'phantom' && 'Solana wallet'}
+                            {w.type === 'tronlink' && 'Tron wallet'}
+                          </span>
+                        </div>
+                      </div>
+                      {wallet.isConnecting ? (
+                        <Loader2 size={20} className="animate-spin text-primary" />
+                      ) : (
+                        <Wallet size={20} className="text-muted-foreground" />
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
 
-                <button
-                  onClick={() => connectWallet('walletconnect')}
-                  className="w-full p-4 rounded-xl border-2 border-border hover:border-primary hover:bg-primary/5 transition-all flex items-center justify-between"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-purple-500 rounded-lg flex items-center justify-center text-white font-bold">
-                      W
-                    </div>
-                    <span className="font-semibold text-foreground">WalletConnect</span>
-                  </div>
-                  <Wallet size={20} className="text-muted-foreground" />
-                </button>
+              {/* Wallet detection notice */}
+              <div className="bg-muted/50 border border-border rounded-lg p-3 text-center">
+                <p className="text-xs text-muted-foreground">
+                  Don't have a wallet? Install{' '}
+                  {selectedChain?.id === 'solana' ? (
+                    <a href="https://phantom.app" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+                      Phantom
+                    </a>
+                  ) : selectedChain?.id === 'tron' ? (
+                    <a href="https://www.tronlink.org" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+                      TronLink
+                    </a>
+                  ) : (
+                    <a href="https://metamask.io" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+                      MetaMask
+                    </a>
+                  )}
+                </p>
               </div>
             </div>
           )}
@@ -318,6 +432,21 @@ const Checkout = () => {
                   {formatTime(timeLeft)}
                 </div>
               </div>
+
+              {/* Connected wallet */}
+              {wallet.isConnected && wallet.address && (
+                <div className="bg-muted rounded-xl p-3 border border-border">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 size={16} className="text-success" />
+                      <span className="text-sm text-muted-foreground">Connected:</span>
+                    </div>
+                    <span className="text-sm font-mono text-foreground">
+                      {wallet.address.slice(0, 6)}...{wallet.address.slice(-4)}
+                    </span>
+                  </div>
+                </div>
+              )}
 
               <div className="bg-gradient-to-br from-primary/10 to-secondary/10 rounded-xl p-4 border border-primary/20">
                 <div className="text-sm text-muted-foreground mb-1">You will pay</div>
@@ -352,14 +481,18 @@ const Checkout = () => {
 
               <button
                 onClick={handlePayment}
-                className="w-full gradient-primary text-primary-foreground py-4 rounded-xl font-semibold hover:shadow-lg transition-all flex items-center justify-center gap-2"
+                disabled={!wallet.isConnected}
+                className="w-full gradient-primary text-primary-foreground py-4 rounded-xl font-semibold hover:shadow-lg transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Wallet size={20} />
                 Pay {totalCrypto} USDT
               </button>
 
               <button
-                onClick={() => setStep('wallet-connect')}
+                onClick={() => {
+                  wallet.disconnect();
+                  setStep('wallet-connect');
+                }}
                 className="w-full text-muted-foreground py-2 text-sm hover:text-foreground"
               >
                 Change wallet
@@ -397,8 +530,8 @@ const Checkout = () => {
                     <Check size={16} />
                     <span className="font-medium">Escrow Created</span>
                   </div>
-                  <div className="text-xs text-success break-all">
-                    {txHash}
+                  <div className="text-xs text-success break-all font-mono">
+                    {txHash.slice(0, 20)}...{txHash.slice(-10)}
                   </div>
                 </div>
               )}
@@ -436,6 +569,12 @@ const Checkout = () => {
                   <span className="text-muted-foreground">Network</span>
                   <span className="font-medium text-foreground">{selectedChain?.name}</span>
                 </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Wallet</span>
+                  <span className="font-medium text-foreground font-mono">
+                    {wallet.address?.slice(0, 6)}...{wallet.address?.slice(-4)}
+                  </span>
+                </div>
                 <div className="flex justify-between text-sm items-center">
                   <span className="text-muted-foreground">Transaction</span>
                   <button
@@ -449,7 +588,7 @@ const Checkout = () => {
               </div>
 
               <a
-                href={`https://tronscan.org/#/transaction/${txHash}`}
+                href={getBlockExplorerUrl(selectedChain, txHash)}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center justify-center gap-2 text-primary hover:text-primary/80 text-sm"
@@ -459,10 +598,52 @@ const Checkout = () => {
               </a>
 
               <button
-                onClick={() => setIsOpen(false)}
+                onClick={() => {
+                  wallet.disconnect();
+                  setIsOpen(false);
+                }}
                 className="w-full bg-foreground text-background py-4 rounded-xl font-semibold hover:bg-foreground/90 transition-all"
               >
                 Done
+              </button>
+            </div>
+          )}
+
+          {/* Step 6: Failed */}
+          {step === 'failed' && (
+            <div className="space-y-6 py-8 text-center animate-scale-in">
+              <div className="flex justify-center">
+                <div className="w-20 h-20 bg-destructive rounded-full flex items-center justify-center">
+                  <X className="text-destructive-foreground" size={40} />
+                </div>
+              </div>
+
+              <div>
+                <h3 className="text-2xl font-bold text-foreground mb-2">Payment Failed</h3>
+                <p className="text-muted-foreground">
+                  Something went wrong. Please try again.
+                </p>
+              </div>
+
+              <button
+                onClick={() => {
+                  setStep('payment');
+                  setEscrowCreated(false);
+                  setTxHash('');
+                }}
+                className="w-full gradient-primary text-primary-foreground py-4 rounded-xl font-semibold"
+              >
+                Try Again
+              </button>
+
+              <button
+                onClick={() => {
+                  wallet.disconnect();
+                  setIsOpen(false);
+                }}
+                className="w-full text-muted-foreground py-2 text-sm hover:text-foreground"
+              >
+                Cancel
               </button>
             </div>
           )}
