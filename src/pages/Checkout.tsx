@@ -2,9 +2,9 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Wallet, Copy, Check, AlertCircle, Loader2, ExternalLink, X, CheckCircle2 } from 'lucide-react';
 import { useWallet, WalletType, ChainType as WalletChainType } from '@/hooks/useWallet';
+import { useTokenTransfer } from '@/hooks/useTokenTransfer';
 import { ChainType } from '@/types/merchant';
 import { toast } from 'sonner';
-
 interface PaymentData {
   merchantName: string;
   merchantLogo: string;
@@ -35,7 +35,7 @@ type Step = 'initial' | 'wallet-connect' | 'payment' | 'processing' | 'success' 
 const Checkout = () => {
   const [searchParams] = useSearchParams();
   const wallet = useWallet();
-  
+  const tokenTransfer = useTokenTransfer();
   // Parse URL parameters
   const urlAmount = searchParams.get('amount');
   const urlCurrency = searchParams.get('currency');
@@ -154,28 +154,40 @@ const Checkout = () => {
       return;
     }
 
+    if (!selectedChain) {
+      toast.error('Please select a payment network');
+      return;
+    }
+
     setStep('processing');
     
     try {
-      // Simulate escrow creation
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      // Start the real token transfer
+      const txHash = await tokenTransfer.transferUSDT(
+        selectedChain.id as ChainType,
+        totalCrypto
+      );
+      
+      if (!txHash) {
+        throw new Error('Transaction failed');
+      }
+      
       setEscrowCreated(true);
+      setTxHash(txHash);
       
-      // Generate mock transaction hash
-      const mockTxHash = '0x' + Array.from({ length: 64 }, () => 
-        Math.floor(Math.random() * 16).toString(16)
-      ).join('');
-      setTxHash(mockTxHash);
-      
-      // Simulate payment processing
-      await new Promise(resolve => setTimeout(resolve, 3000));
+      // Wait a moment for UI feedback
+      await new Promise(resolve => setTimeout(resolve, 1500));
       setStep('success');
       
       toast.success('Payment completed successfully!');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Payment error:', error);
       setStep('failed');
-      toast.error('Payment failed. Please try again.');
+      
+      // Don't show duplicate toast if already shown by transfer hook
+      if (!error.message?.includes('rejected')) {
+        toast.error(error.message || 'Payment failed. Please try again.');
+      }
     }
   };
 
@@ -187,14 +199,8 @@ const Checkout = () => {
   };
 
   const getBlockExplorerUrl = (chain: Chain | null, hash: string) => {
-    if (!chain) return '#';
-    switch (chain.id) {
-      case 'tron': return `https://tronscan.org/#/transaction/${hash}`;
-      case 'base': return `https://basescan.org/tx/${hash}`;
-      case 'arbitrum': return `https://arbiscan.io/tx/${hash}`;
-      case 'solana': return `https://solscan.io/tx/${hash}`;
-      default: return '#';
-    }
+    if (!chain || !hash) return '#';
+    return tokenTransfer.getExplorerUrl(chain.id as ChainType, hash);
   };
 
   if (!isOpen) {
@@ -514,31 +520,45 @@ const Checkout = () => {
 
               <div>
                 <h3 className="text-xl font-bold text-foreground mb-2">
-                  {!escrowCreated ? 'Creating Escrow...' : 'Processing Payment...'}
+                  {tokenTransfer.status === 'pending' 
+                    ? 'Confirm in Wallet...' 
+                    : escrowCreated 
+                      ? 'Transaction Submitted!' 
+                      : 'Processing Payment...'}
                 </h3>
                 <p className="text-muted-foreground">
-                  {!escrowCreated
-                    ? 'Securing your funds in escrow contract'
-                    : 'Converting crypto to NGN and sending to merchant'
+                  {tokenTransfer.status === 'pending'
+                    ? 'Please confirm the transaction in your wallet'
+                    : escrowCreated
+                      ? 'Waiting for blockchain confirmation'
+                      : 'Preparing your USDT transfer'
                   }
                 </p>
               </div>
 
-              {escrowCreated && (
+              {escrowCreated && txHash && (
                 <div className="bg-success/10 border border-success/20 rounded-lg p-3 animate-fade-in">
                   <div className="flex items-center gap-2 text-success text-sm mb-2">
                     <Check size={16} />
-                    <span className="font-medium">Escrow Created</span>
+                    <span className="font-medium">Transaction Submitted</span>
                   </div>
                   <div className="text-xs text-success break-all font-mono">
                     {txHash.slice(0, 20)}...{txHash.slice(-10)}
                   </div>
+                  <a
+                    href={getBlockExplorerUrl(selectedChain, txHash)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center justify-center gap-1 text-success/80 hover:text-success text-xs mt-2"
+                  >
+                    View on explorer <ExternalLink size={12} />
+                  </a>
                 </div>
               )}
 
               <div className="flex items-center justify-center gap-2">
-                <div className={`w-3 h-3 rounded-full ${escrowCreated ? 'bg-success' : 'bg-primary animate-pulse'}`}></div>
-                <div className={`w-3 h-3 rounded-full ${escrowCreated ? 'bg-primary animate-pulse' : 'bg-muted'}`}></div>
+                <div className={`w-3 h-3 rounded-full ${tokenTransfer.status === 'pending' ? 'bg-primary animate-pulse' : 'bg-success'}`}></div>
+                <div className={`w-3 h-3 rounded-full ${escrowCreated ? 'bg-success' : tokenTransfer.status !== 'pending' ? 'bg-primary animate-pulse' : 'bg-muted'}`}></div>
                 <div className="w-3 h-3 rounded-full bg-muted"></div>
               </div>
             </div>
@@ -621,7 +641,7 @@ const Checkout = () => {
               <div>
                 <h3 className="text-2xl font-bold text-foreground mb-2">Payment Failed</h3>
                 <p className="text-muted-foreground">
-                  Something went wrong. Please try again.
+                  {tokenTransfer.error || 'Something went wrong. Please try again.'}
                 </p>
               </div>
 
@@ -630,6 +650,7 @@ const Checkout = () => {
                   setStep('payment');
                   setEscrowCreated(false);
                   setTxHash('');
+                  tokenTransfer.reset();
                 }}
                 className="w-full gradient-primary text-primary-foreground py-4 rounded-xl font-semibold"
               >
