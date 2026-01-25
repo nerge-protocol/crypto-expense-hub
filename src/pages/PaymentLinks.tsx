@@ -1,11 +1,13 @@
 import { useState } from 'react';
+import { QRCodeSVG } from 'qrcode.react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Copy, Check, Link, ExternalLink, Plus, Trash2 } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Copy, Check, Link, ExternalLink, Plus, Trash2, QrCode, Download } from 'lucide-react';
 import { toast } from 'sonner';
 import { ChainType, CHAIN_CONFIG } from '@/types/merchant';
 
@@ -281,6 +283,92 @@ const PaymentLinks = () => {
                             <Copy className="h-4 w-4" />
                           )}
                         </Button>
+                        
+                        {/* QR Code Dialog */}
+                        <Dialog>
+                          <DialogTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-8 w-8">
+                              <QrCode className="h-4 w-4" />
+                            </Button>
+                          </DialogTrigger>
+                          <DialogContent className="sm:max-w-md">
+                            <DialogHeader>
+                              <DialogTitle className="text-center">{link.name}</DialogTitle>
+                            </DialogHeader>
+                            <div className="flex flex-col items-center gap-4 py-4">
+                              <div className="p-4 bg-white rounded-xl shadow-lg">
+                                <QRCodeSVG
+                                  id={`qr-${link.id}`}
+                                  value={link.url}
+                                  size={200}
+                                  level="H"
+                                  includeMargin
+                                  bgColor="#ffffff"
+                                  fgColor="#000000"
+                                />
+                              </div>
+                              <div className="text-center">
+                                <p className="text-2xl font-bold text-primary">
+                                  ₦{link.amount.toLocaleString()}
+                                </p>
+                                <p className="text-sm text-muted-foreground">
+                                  {CHAIN_CONFIG[link.chain].name}
+                                </p>
+                                <p className="text-xs text-muted-foreground mt-1">
+                                  Ref: {link.reference}
+                                </p>
+                              </div>
+                              <div className="flex gap-2 w-full">
+                                <Button
+                                  variant="outline"
+                                  className="flex-1"
+                                  onClick={() => copyToClipboard(link)}
+                                >
+                                  {copiedId === link.id ? (
+                                    <>
+                                      <Check className="mr-2 h-4 w-4" />
+                                      Copied!
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Copy className="mr-2 h-4 w-4" />
+                                      Copy Link
+                                    </>
+                                  )}
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  className="flex-1"
+                                  onClick={() => {
+                                    const svg = document.getElementById(`qr-${link.id}`);
+                                    if (svg) {
+                                      const svgData = new XMLSerializer().serializeToString(svg);
+                                      const canvas = document.createElement('canvas');
+                                      const ctx = canvas.getContext('2d');
+                                      const img = new Image();
+                                      img.onload = () => {
+                                        canvas.width = img.width;
+                                        canvas.height = img.height;
+                                        ctx?.drawImage(img, 0, 0);
+                                        const pngUrl = canvas.toDataURL('image/png');
+                                        const downloadLink = document.createElement('a');
+                                        downloadLink.href = pngUrl;
+                                        downloadLink.download = `payment-qr-${link.reference}.png`;
+                                        downloadLink.click();
+                                      };
+                                      img.src = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgData)));
+                                    }
+                                    toast.success('QR code downloaded');
+                                  }}
+                                >
+                                  <Download className="mr-2 h-4 w-4" />
+                                  Download
+                                </Button>
+                              </div>
+                            </div>
+                          </DialogContent>
+                        </Dialog>
+
                         <Button
                           variant="ghost"
                           size="icon"

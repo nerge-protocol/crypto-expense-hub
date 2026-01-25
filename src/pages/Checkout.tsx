@@ -1,5 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Wallet, Copy, Check, AlertCircle, Loader2, ExternalLink, X } from 'lucide-react';
+import { ChainType } from '@/types/merchant';
 
 interface PaymentData {
   merchantName: string;
@@ -8,6 +10,7 @@ interface PaymentData {
   currency: string;
   reference: string;
   email: string;
+  description?: string;
   publicKey: string;
   callbackUrl: string;
   metadata: {
@@ -27,36 +30,52 @@ interface Chain {
 type Step = 'initial' | 'wallet-connect' | 'payment' | 'processing' | 'success' | 'failed';
 
 const Checkout = () => {
+  const [searchParams] = useSearchParams();
+  
+  // Parse URL parameters
+  const urlAmount = searchParams.get('amount');
+  const urlCurrency = searchParams.get('currency');
+  const urlChain = searchParams.get('chain') as ChainType | null;
+  const urlRef = searchParams.get('ref');
+  const urlDesc = searchParams.get('desc');
+  const urlEmail = searchParams.get('email');
+
   const [isOpen, setIsOpen] = useState(false);
-  const [paymentData] = useState<PaymentData>({
+  
+  // Payment data from URL params or defaults
+  const paymentData = useMemo<PaymentData>(() => ({
     merchantName: "Tech Store Nigeria",
     merchantLogo: "https://via.placeholder.com/100x100/4F46E5/FFFFFF?text=TS",
-    amount: 50000,
-    currency: "NGN",
-    reference: "TXN-" + Date.now(),
-    email: "customer@example.com",
+    amount: urlAmount ? parseFloat(urlAmount) : 50000,
+    currency: urlCurrency || "NGN",
+    reference: urlRef || "TXN-" + Date.now(),
+    email: urlEmail || "customer@example.com",
+    description: urlDesc || undefined,
     publicKey: "pk_test_xxxxxxxxxxxxx",
     callbackUrl: "https://merchant.com/verify",
     metadata: {
       orderId: "ORD-12345",
       customerName: "John Doe"
     }
-  });
+  }), [urlAmount, urlCurrency, urlRef, urlDesc, urlEmail]);
+
+  const chains: Chain[] = [
+    { id: 'tron', name: 'Tron (TRC20)', icon: '🔷', fee: 'Low (~$2)', popular: !urlChain || urlChain === 'tron' },
+    { id: 'base', name: 'Base', icon: '🔵', fee: 'Very Low (~$0.30)', popular: urlChain === 'base' },
+    { id: 'arbitrum', name: 'Arbitrum', icon: '🔴', fee: 'Low (~$0.50)', popular: urlChain === 'arbitrum' },
+    { id: 'solana', name: 'Solana', icon: '🟣', fee: 'Extremely Low (~$0.0001)', popular: urlChain === 'solana' }
+  ];
+
+  // Pre-select chain if provided in URL
+  const preSelectedChain = urlChain ? chains.find(c => c.id === urlChain) || null : null;
 
   const [step, setStep] = useState<Step>('initial');
-  const [selectedChain, setSelectedChain] = useState<Chain | null>(null);
+  const [selectedChain, setSelectedChain] = useState<Chain | null>(preSelectedChain);
   const [selectedWallet, setSelectedWallet] = useState<string | null>(null);
   const [escrowCreated, setEscrowCreated] = useState(false);
   const [txHash, setTxHash] = useState('');
   const [copied, setCopied] = useState(false);
   const [timeLeft, setTimeLeft] = useState(600);
-
-  const chains: Chain[] = [
-    { id: 'tron', name: 'Tron (TRC20)', icon: '🔷', fee: 'Low (~$2)', popular: true },
-    { id: 'base', name: 'Base', icon: '🔵', fee: 'Very Low (~$0.30)' },
-    { id: 'arbitrum', name: 'Arbitrum', icon: '🔴', fee: 'Low (~$0.50)' },
-    { id: 'solana', name: 'Solana', icon: '🟣', fee: 'Extremely Low (~$0.0001)' }
-  ];
 
   const usdtRate = 1420;
   const cryptoAmount = (paymentData.amount / usdtRate).toFixed(2);
@@ -165,6 +184,9 @@ const Checkout = () => {
               <span className="text-3xl font-bold text-primary-foreground">₦{paymentData.amount.toLocaleString()}</span>
               <span className="text-primary-foreground/60 text-sm">≈ ${cryptoAmount} USDT</span>
             </div>
+            {paymentData.description && (
+              <p className="text-primary-foreground/70 text-sm mt-2">{paymentData.description}</p>
+            )}
           </div>
         </div>
 
