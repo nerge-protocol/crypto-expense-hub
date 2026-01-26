@@ -1,10 +1,18 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Wallet, Copy, Check, AlertCircle, Loader2, ExternalLink, X, CheckCircle2 } from 'lucide-react';
-import { useWallet, WalletType, ChainType as WalletChainType } from '@/hooks/useWallet';
+import { useWallet, WalletType, SupportedChain } from '@/hooks/useWallet';
 import { useTokenTransfer } from '@/hooks/useTokenTransfer';
-import { ChainType } from '@/types/merchant';
+import { 
+  getEnabledChains, 
+  getWalletsForChain, 
+  getAvailableTokens,
+  TokenSymbol,
+  isTestnet,
+  WalletConfig,
+} from '@/lib/chains-config';
 import { toast } from 'sonner';
+
 interface PaymentData {
   merchantName: string;
   merchantLogo: string;
@@ -22,12 +30,13 @@ interface PaymentData {
 }
 
 interface Chain {
-  id: string;
+  id: SupportedChain;
   name: string;
   icon: string;
   fee: string;
   popular?: boolean;
-  wallets: { type: WalletType; name: string; icon: string; color: string }[];
+  wallets: WalletConfig[];
+  tokens: TokenSymbol[];
 }
 
 type Step = 'initial' | 'wallet-connect' | 'payment' | 'processing' | 'success' | 'failed';
@@ -36,15 +45,18 @@ const Checkout = () => {
   const [searchParams] = useSearchParams();
   const wallet = useWallet();
   const tokenTransfer = useTokenTransfer();
+  
   // Parse URL parameters
   const urlAmount = searchParams.get('amount');
   const urlCurrency = searchParams.get('currency');
-  const urlChain = searchParams.get('chain') as ChainType | null;
+  const urlChain = searchParams.get('chain') as SupportedChain | null;
   const urlRef = searchParams.get('ref');
   const urlDesc = searchParams.get('desc');
   const urlEmail = searchParams.get('email');
+  const urlToken = searchParams.get('token') as TokenSymbol | null;
 
   const [isOpen, setIsOpen] = useState(false);
+  const [selectedToken, setSelectedToken] = useState<TokenSymbol>(urlToken || 'USDC');
   
   // Payment data from URL params or defaults
   const paymentData = useMemo<PaymentData>(() => ({
@@ -63,51 +75,19 @@ const Checkout = () => {
     }
   }), [urlAmount, urlCurrency, urlRef, urlDesc, urlEmail]);
 
-  // Chain configurations with available wallets
-  const chains: Chain[] = [
-    { 
-      id: 'tron', 
-      name: 'Tron (TRC20)', 
-      icon: '🔷', 
-      fee: 'Low (~$2)', 
-      popular: !urlChain || urlChain === 'tron',
-      wallets: [
-        { type: 'tronlink' as WalletType, name: 'TronLink', icon: '🔷', color: 'bg-red-500' },
-      ]
-    },
-    { 
-      id: 'base', 
-      name: 'Base', 
-      icon: '🔵', 
-      fee: 'Very Low (~$0.30)', 
-      popular: urlChain === 'base',
-      wallets: [
-        { type: 'metamask' as WalletType, name: 'MetaMask', icon: '🦊', color: 'bg-orange-500' },
-        { type: 'trustwallet' as WalletType, name: 'Trust Wallet', icon: '🛡️', color: 'bg-blue-500' },
-      ]
-    },
-    { 
-      id: 'arbitrum', 
-      name: 'Arbitrum', 
-      icon: '🔴', 
-      fee: 'Low (~$0.50)', 
-      popular: urlChain === 'arbitrum',
-      wallets: [
-        { type: 'metamask' as WalletType, name: 'MetaMask', icon: '🦊', color: 'bg-orange-500' },
-        { type: 'trustwallet' as WalletType, name: 'Trust Wallet', icon: '🛡️', color: 'bg-blue-500' },
-      ]
-    },
-    { 
-      id: 'solana', 
-      name: 'Solana', 
-      icon: '🟣', 
-      fee: 'Extremely Low (~$0.0001)', 
-      popular: urlChain === 'solana',
-      wallets: [
-        { type: 'phantom' as WalletType, name: 'Phantom', icon: '👻', color: 'bg-purple-500' },
-      ]
-    }
-  ];
+  // Build chains from configuration
+  const chains: Chain[] = useMemo(() => {
+    const enabledChains = getEnabledChains();
+    return enabledChains.map(chainConfig => ({
+      id: chainConfig.id,
+      name: chainConfig.displayName,
+      icon: chainConfig.icon,
+      fee: chainConfig.fee,
+      popular: urlChain ? urlChain === chainConfig.id : chainConfig.id === 'base',
+      wallets: getWalletsForChain(chainConfig.id),
+      tokens: getAvailableTokens(chainConfig.id),
+    }));
+  }, [urlChain]);
 
   // Pre-select chain if provided in URL
   const preSelectedChain = urlChain ? chains.find(c => c.id === urlChain) || null : null;
@@ -123,6 +103,16 @@ const Checkout = () => {
   const cryptoAmount = (paymentData.amount / usdtRate).toFixed(2);
   const platformFee = (parseFloat(cryptoAmount) * 0.015).toFixed(2);
   const totalCrypto = (parseFloat(cryptoAmount) + parseFloat(platformFee)).toFixed(2);
+
+  // Update selected token when chain changes
+  useEffect(() => {
+    if (selectedChain) {
+      const availableTokens = selectedChain.tokens;
+      if (!availableTokens.includes(selectedToken)) {
+        setSelectedToken(availableTokens[0] || 'USDC');
+      }
+    }
+  }, [selectedChain, selectedToken]);
 
   useEffect(() => {
     if (step === 'payment' && timeLeft > 0) {
@@ -142,7 +132,7 @@ const Checkout = () => {
   const connectWallet = async (walletType: WalletType) => {
     if (!selectedChain) return;
     
-    const success = await wallet.connect(walletType, selectedChain.id as WalletChainType);
+    const success = await wallet.connect(walletType, selectedChain.id);
     if (success) {
       setStep('payment');
     }
@@ -163,17 +153,18 @@ const Checkout = () => {
     
     try {
       // Start the real token transfer
-      const txHash = await tokenTransfer.transferUSDT(
-        selectedChain.id as ChainType,
+      const hash = await tokenTransfer.transferToken(
+        selectedChain.id,
+        selectedToken,
         totalCrypto
       );
       
-      if (!txHash) {
+      if (!hash) {
         throw new Error('Transaction failed');
       }
       
       setEscrowCreated(true);
-      setTxHash(txHash);
+      setTxHash(hash);
       
       // Wait a moment for UI feedback
       await new Promise(resolve => setTimeout(resolve, 1500));
@@ -200,7 +191,7 @@ const Checkout = () => {
 
   const getBlockExplorerUrl = (chain: Chain | null, hash: string) => {
     if (!chain || !hash) return '#';
-    return tokenTransfer.getExplorerUrl(chain.id as ChainType, hash);
+    return tokenTransfer.getExplorerUrl(chain.id, hash);
   };
 
   if (!isOpen) {
@@ -267,12 +258,19 @@ const Checkout = () => {
             <p className="text-primary-foreground/80 text-sm">Amount to pay</p>
             <div className="flex items-baseline gap-2">
               <span className="text-3xl font-bold text-primary-foreground">₦{paymentData.amount.toLocaleString()}</span>
-              <span className="text-primary-foreground/60 text-sm">≈ ${cryptoAmount} USDT</span>
+              <span className="text-primary-foreground/60 text-sm">≈ ${cryptoAmount} {selectedToken}</span>
             </div>
             {paymentData.description && (
               <p className="text-primary-foreground/70 text-sm mt-2">{paymentData.description}</p>
             )}
           </div>
+          
+          {/* Testnet Indicator */}
+          {isTestnet() && (
+            <div className="mt-3 bg-warning/20 border border-warning/30 rounded-lg px-3 py-2 text-center">
+              <span className="text-warning text-xs font-medium">⚠️ TESTNET MODE - No real funds will be transferred</span>
+            </div>
+          )}
         </div>
 
         {/* Content */}
@@ -310,7 +308,12 @@ const Checkout = () => {
                               </span>
                             )}
                           </div>
-                          <div className="text-sm text-muted-foreground">{chain.fee}</div>
+                          <div className="text-sm text-muted-foreground flex items-center gap-2">
+                            <span>{chain.fee}</span>
+                            <span className="text-xs text-muted-foreground/70">
+                              • {chain.tokens.join(', ')}
+                            </span>
+                          </div>
                         </div>
                       </div>
                       <div className="text-muted-foreground">→</div>
@@ -454,9 +457,31 @@ const Checkout = () => {
                 </div>
               )}
 
+              {/* Token Selector */}
+              {selectedChain && selectedChain.tokens.length > 1 && (
+                <div className="bg-muted rounded-xl p-4 border border-border">
+                  <div className="text-sm text-muted-foreground mb-2">Select Token</div>
+                  <div className="flex gap-2">
+                    {selectedChain.tokens.map((token) => (
+                      <button
+                        key={token}
+                        onClick={() => setSelectedToken(token)}
+                        className={`flex-1 py-2 px-4 rounded-lg font-medium transition-all ${
+                          selectedToken === token
+                            ? 'bg-primary text-primary-foreground'
+                            : 'bg-background border border-border text-foreground hover:border-primary'
+                        }`}
+                      >
+                        {token}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <div className="bg-gradient-to-br from-primary/10 to-secondary/10 rounded-xl p-4 border border-primary/20">
                 <div className="text-sm text-muted-foreground mb-1">You will pay</div>
-                <div className="text-3xl font-bold text-foreground">{totalCrypto} USDT</div>
+                <div className="text-3xl font-bold text-foreground">{totalCrypto} {selectedToken}</div>
                 <div className="text-sm text-muted-foreground mt-1">
                   on {selectedChain?.name}
                 </div>
@@ -465,15 +490,15 @@ const Checkout = () => {
               <div className="space-y-2 bg-muted rounded-xl p-4 border border-border">
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Amount</span>
-                  <span className="font-medium text-foreground">{cryptoAmount} USDT</span>
+                  <span className="font-medium text-foreground">{cryptoAmount} {selectedToken}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Platform Fee (1.5%)</span>
-                  <span className="font-medium text-foreground">{platformFee} USDT</span>
+                  <span className="font-medium text-foreground">{platformFee} {selectedToken}</span>
                 </div>
                 <div className="border-t border-border pt-2 flex justify-between">
                   <span className="font-semibold text-foreground">Total</span>
-                  <span className="font-bold text-foreground">{totalCrypto} USDT</span>
+                  <span className="font-bold text-foreground">{totalCrypto} {selectedToken}</span>
                 </div>
               </div>
 
@@ -491,7 +516,7 @@ const Checkout = () => {
                 className="w-full gradient-primary text-primary-foreground py-4 rounded-xl font-semibold hover:shadow-lg transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Wallet size={20} />
-                Pay {totalCrypto} USDT
+                Pay {totalCrypto} {selectedToken}
               </button>
 
               <button
