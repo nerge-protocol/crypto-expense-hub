@@ -1,8 +1,19 @@
 import { useState, useCallback, useEffect } from 'react';
 import { toast } from 'sonner';
+import { 
+  SupportedChain, 
+  WalletType,
+  getChainConfig,
+  getCurrentChainId,
+  getCurrentRpcUrl,
+  getCurrentBlockExplorer,
+  getHexChainId,
+  CHAIN_CONFIGS,
+} from '@/lib/chains-config';
 
-export type WalletType = 'metamask' | 'trustwallet' | 'phantom' | 'tronlink';
-export type ChainType = 'tron' | 'base' | 'arbitrum' | 'solana';
+// Re-export types for convenience
+export type { WalletType, SupportedChain };
+export type ChainType = SupportedChain;
 
 interface WalletState {
   isConnected: boolean;
@@ -14,28 +25,10 @@ interface WalletState {
 }
 
 interface UseWalletReturn extends WalletState {
-  connect: (walletType: WalletType, targetChain: ChainType) => Promise<boolean>;
+  connect: (walletType: WalletType, targetChain: SupportedChain) => Promise<boolean>;
   disconnect: () => void;
-  switchChain: (chainId: number) => Promise<boolean>;
+  switchChain: (chain: SupportedChain) => Promise<boolean>;
 }
-
-// Chain configurations
-const chainConfigs: Record<string, { chainId: string; chainName: string; rpcUrl: string; symbol: string; blockExplorer: string }> = {
-  base: {
-    chainId: '0x2105', // 8453
-    chainName: 'Base',
-    rpcUrl: 'https://mainnet.base.org',
-    symbol: 'ETH',
-    blockExplorer: 'https://basescan.org',
-  },
-  arbitrum: {
-    chainId: '0xa4b1', // 42161
-    chainName: 'Arbitrum One',
-    rpcUrl: 'https://arb1.arbitrum.io/rpc',
-    symbol: 'ETH',
-    blockExplorer: 'https://arbiscan.io',
-  },
-};
 
 export function useWallet(): UseWalletReturn {
   const [state, setState] = useState<WalletState>({
@@ -72,38 +65,40 @@ export function useWallet(): UseWalletReturn {
   }, []);
 
   // Switch to a specific chain (EVM only)
-  const switchChain = useCallback(async (chainId: number): Promise<boolean> => {
+  const switchChain = useCallback(async (chain: SupportedChain): Promise<boolean> => {
     const ethereum = getEthereumProvider();
     if (!ethereum) return false;
+
+    const chainConfig = getChainConfig(chain);
+    if (!chainConfig || !chainConfig.isEVM) return false;
+
+    const targetChainId = getCurrentChainId(chain);
+    const hexChainId = getHexChainId(chain);
 
     try {
       await ethereum.request({
         method: 'wallet_switchEthereumChain',
-        params: [{ chainId: `0x${chainId.toString(16)}` }],
+        params: [{ chainId: hexChainId }],
       });
       return true;
     } catch (switchError: any) {
       // Chain not added, try to add it
       if (switchError.code === 4902) {
-        const chainKey = chainId === 8453 ? 'base' : chainId === 42161 ? 'arbitrum' : null;
-        if (chainKey && chainConfigs[chainKey]) {
-          const config = chainConfigs[chainKey];
-          try {
-            await ethereum.request({
-              method: 'wallet_addEthereumChain',
-              params: [{
-                chainId: config.chainId,
-                chainName: config.chainName,
-                nativeCurrency: { name: config.symbol, symbol: config.symbol, decimals: 18 },
-                rpcUrls: [config.rpcUrl],
-                blockExplorerUrls: [config.blockExplorer],
-              }],
-            });
-            return true;
-          } catch (addError) {
-            console.error('Failed to add chain:', addError);
-            return false;
-          }
+        try {
+          await ethereum.request({
+            method: 'wallet_addEthereumChain',
+            params: [{
+              chainId: hexChainId,
+              chainName: chainConfig.displayName,
+              nativeCurrency: chainConfig.nativeCurrency,
+              rpcUrls: [getCurrentRpcUrl(chain)],
+              blockExplorerUrls: [getCurrentBlockExplorer(chain)],
+            }],
+          });
+          return true;
+        } catch (addError) {
+          console.error('Failed to add chain:', addError);
+          return false;
         }
       }
       console.error('Failed to switch chain:', switchError);
@@ -112,7 +107,7 @@ export function useWallet(): UseWalletReturn {
   }, [getEthereumProvider]);
 
   // Connect to EVM wallet (MetaMask, Trust Wallet, etc.)
-  const connectEVM = useCallback(async (targetChain: ChainType): Promise<{ address: string; chainId: number } | null> => {
+  const connectEVM = useCallback(async (targetChain: SupportedChain): Promise<{ address: string; chainId: number } | null> => {
     const ethereum = getEthereumProvider();
     if (!ethereum) {
       throw new Error('No EVM wallet detected. Please install MetaMask or another Web3 wallet.');
@@ -132,9 +127,9 @@ export function useWallet(): UseWalletReturn {
       let chainId = parseInt(chainIdHex, 16);
 
       // Switch to target chain if needed
-      const targetChainId = targetChain === 'base' ? 8453 : targetChain === 'arbitrum' ? 42161 : null;
+      const targetChainId = getCurrentChainId(targetChain);
       if (targetChainId && chainId !== targetChainId) {
-        const switched = await switchChain(targetChainId);
+        const switched = await switchChain(targetChain);
         if (switched) {
           chainId = targetChainId;
         }
@@ -193,8 +188,10 @@ export function useWallet(): UseWalletReturn {
   }, [getTronLinkProvider]);
 
   // Main connect function
-  const connect = useCallback(async (walletType: WalletType, targetChain: ChainType): Promise<boolean> => {
+  const connect = useCallback(async (walletType: WalletType, targetChain: SupportedChain): Promise<boolean> => {
     setState(prev => ({ ...prev, isConnecting: true, error: null }));
+
+    const chainConfig = getChainConfig(targetChain);
 
     try {
       let result: { address: string; chainId?: number } | null = null;
@@ -202,9 +199,10 @@ export function useWallet(): UseWalletReturn {
       switch (walletType) {
         case 'metamask':
         case 'trustwallet':
-          // Both use the same EVM interface
-          if (targetChain === 'solana') {
-            throw new Error('Use Phantom wallet for Solana');
+        case 'walletconnect':
+          // All use the same EVM interface
+          if (!chainConfig?.isEVM) {
+            throw new Error(`${walletType} does not support ${targetChain}`);
           }
           if (targetChain === 'tron') {
             throw new Error('Use TronLink for Tron network');
