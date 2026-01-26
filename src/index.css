@@ -165,15 +165,29 @@
     background-clip: text;
   }
 
+  /* Theme-aware surface gradient */
   .gradient-surface {
+    background: linear-gradient(180deg, hsl(0, 0%, 100%) 0%, hsl(210, 40%, 98%) 100%);
+  }
+  .dark .gradient-surface {
     background: linear-gradient(180deg, hsl(222, 47%, 8%) 0%, hsl(271, 60%, 8%) 100%);
   }
 
+  /* Theme-aware hero gradient */
   .gradient-hero {
+    background: linear-gradient(135deg, hsl(0, 0%, 100%) 0%, hsl(210, 40%, 98%) 50%, hsl(0, 0%, 100%) 100%);
+  }
+  .dark .gradient-hero {
     background: linear-gradient(135deg, hsl(222, 47%, 6%) 0%, hsl(271, 50%, 10%) 50%, hsl(222, 47%, 6%) 100%);
   }
 
+  /* Theme-aware glass effect */
   .glass {
+    backdrop-filter: blur(12px);
+    background: hsla(0, 0%, 100%, 0.8);
+    border: 1px solid hsla(214, 32%, 91%, 0.5);
+  }
+  .dark .glass {
     backdrop-filter: blur(12px);
     background: hsla(222, 47%, 8%, 0.8);
     border: 1px solid hsla(222, 47%, 20%, 0.3);
