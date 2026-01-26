@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Lock, ArrowRight, Zap, Shield, Globe } from 'lucide-react';
 import { toast } from 'sonner';
+import { ThemeToggle } from '@/components/ThemeToggle';
 
 export default function Login() {
   const [secretKey, setSecretKey] = useState('');
@@ -49,6 +50,11 @@ export default function Login() {
 
   return (
     <div className="min-h-screen gradient-hero flex">
+      {/* Theme toggle - top right */}
+      <div className="absolute top-4 right-4 z-10">
+        <ThemeToggle />
+      </div>
+      
       {/* Left side - Branding */}
       <div className="hidden lg:flex lg:w-1/2 flex-col justify-between p-12">
         <div>
