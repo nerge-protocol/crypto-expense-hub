@@ -29,7 +29,7 @@ export function useContract(contractName: 'escrowManager' | 'expenseVerifier', c
 
         // Write contract (for transactions) - needs signer
         let writeContractFunc: Function;
-        if (walletClient) {
+        if (walletClient || (typeof window !== 'undefined' && window.ethereum)) {
             const provider = new ethers.BrowserProvider(window.ethereum);
 
             writeContractFunc = async function () {

@@ -37,7 +37,7 @@ export function getUSDCContractAddress(chainId: number) {
 }
 
 
-export function getContractByName(name: 'arbitrum' | 'base' | 'tron' | 'solana') {
+export function getContractByName(name: 'ethereum' | 'arbitrum' | 'base' | 'tron' | 'solana') {
     switch (name) {
         case 'arbitrum':
             if (TESTNET && name === 'arbitrum') {

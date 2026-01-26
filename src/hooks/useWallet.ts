@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { toast } from 'sonner';
-import { 
-  SupportedChain, 
+import {
+  SupportedChain,
   WalletType,
   getChainConfig,
   getCurrentChainId,
@@ -121,7 +121,7 @@ export function useWallet(): UseWalletReturn {
       }
 
       const address = accounts[0];
-      
+
       // Get current chain
       const chainIdHex = await ethereum.request({ method: 'eth_chainId' });
       let chainId = parseInt(chainIdHex, 16);

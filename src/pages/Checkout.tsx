@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Wallet, Copy, Check, AlertCircle, Loader2, ExternalLink, X, CheckCircle2 } from 'lucide-react';
-import { useWallet, WalletType, SupportedChain } from '@/hooks/useWallet';
+import { useWallet, WalletType, SupportedChain, ChainType } from '@/hooks/useWallet';
 import { useTokenTransfer } from '@/hooks/useTokenTransfer';
 import {
   getEnabledChains,
@@ -12,6 +12,8 @@ import {
   WalletConfig,
 } from '@/lib/chains-config';
 import { toast } from 'sonner';
+import { getContractByName } from '@/lib/contracts';
+import { useEscrow } from '@/hooks/useEscrow';
 
 interface PaymentData {
   merchantName: string;
@@ -57,6 +59,8 @@ const Checkout = () => {
 
   const [isOpen, setIsOpen] = useState(false);
   const [selectedToken, setSelectedToken] = useState<TokenSymbol>(urlToken || 'USDC');
+
+  const { createEscrow, loading, error } = useEscrow();
 
   // Payment data from URL params or defaults
   const paymentData = useMemo<PaymentData>(() => ({
@@ -138,6 +142,59 @@ const Checkout = () => {
     }
   };
 
+  const submitPayment = async (params: {
+    amount: string;
+    chain: ChainType;
+    category: string;
+  }) => {
+    try {
+      // 1. Call backend to initiate payment
+      const response = await fetch('/api/payments/initiate-payment-intent', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          amount: parseFloat(params.amount) * 1420, // NGN amount
+          token: 'USDT',
+          chain: 'arbitrum'
+        })
+      });
+
+      const paymentData = await response.json();
+
+      // 2. Create escrow on-chain
+      const arbitrum = getContractByName(params.chain); // 'arbitrum'
+      const result = await createEscrow(
+        arbitrum.usdt,
+        params.amount, // Crypto amount
+        paymentData.data.reference, // Payment ID from backend
+        params.category
+      );
+      console.log("RESULT>>>>>>>>>", result);
+
+
+      // 3. Confirm escrow creation with backend
+      await fetch(`/api/payments/${paymentData.data.reference}/confirm-escrow-and-transfer`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          onchainEscrowId: result.escrowId,
+          txHash: result.txHash
+        })
+      });
+
+      alert('Payment initiated successfully!');
+
+      // Reset form or redirect
+
+      return result;
+    } catch (err) {
+      console.error('Payment failed:', err);
+      alert('Payment failed. Please try again.');
+      setStep('failed');
+      throw err;
+    }
+  };
+
   const handlePayment = async () => {
     if (!wallet.isConnected || !wallet.address) {
       toast.error('Please connect your wallet first');
@@ -153,18 +210,24 @@ const Checkout = () => {
 
     try {
       // Start the real token transfer
-      const hash = await tokenTransfer.transferToken(
-        selectedChain.id,
-        selectedToken,
-        totalCrypto
-      );
+      // const hash = await tokenTransfer.transferToken(
+      //   selectedChain.id,
+      //   selectedToken,
+      //   totalCrypto
+      // );
 
-      if (!hash) {
+      const result = await submitPayment({
+        amount: totalCrypto,
+        chain: selectedChain.id,
+        category: 'payment'
+      });
+
+      if (!result.txHash) {
         throw new Error('Transaction failed');
       }
 
       setEscrowCreated(true);
-      setTxHash(hash);
+      setTxHash(result.txHash);
 
       // Wait a moment for UI feedback
       await new Promise(resolve => setTimeout(resolve, 1500));
@@ -466,8 +529,8 @@ const Checkout = () => {
                         key={token}
                         onClick={() => setSelectedToken(token)}
                         className={`flex-1 py-2 px-4 rounded-lg font-medium transition-all ${selectedToken === token
-                            ? 'bg-primary text-primary-foreground'
-                            : 'bg-background border border-border text-foreground hover:border-primary'
+                          ? 'bg-primary text-primary-foreground'
+                          : 'bg-background border border-border text-foreground hover:border-primary'
                           }`}
                       >
                         {token}
