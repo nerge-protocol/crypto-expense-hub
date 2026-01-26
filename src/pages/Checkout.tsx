@@ -45,7 +45,7 @@ const Checkout = () => {
   const urlEmail = searchParams.get('email');
 
   const [isOpen, setIsOpen] = useState(false);
-  
+
   // Payment data from URL params or defaults
   const paymentData = useMemo<PaymentData>(() => ({
     merchantName: "Tech Store Nigeria",
@@ -65,43 +65,43 @@ const Checkout = () => {
 
   // Chain configurations with available wallets
   const chains: Chain[] = [
-    { 
-      id: 'tron', 
-      name: 'Tron (TRC20)', 
-      icon: '🔷', 
-      fee: 'Low (~$2)', 
+    {
+      id: 'tron',
+      name: 'Tron (TRC20)',
+      icon: '🔷',
+      fee: 'Low (~$2)',
       popular: !urlChain || urlChain === 'tron',
       wallets: [
         { type: 'tronlink' as WalletType, name: 'TronLink', icon: '🔷', color: 'bg-red-500' },
       ]
     },
-    { 
-      id: 'base', 
-      name: 'Base', 
-      icon: '🔵', 
-      fee: 'Very Low (~$0.30)', 
+    {
+      id: 'base',
+      name: 'Base',
+      icon: '🔵',
+      fee: 'Very Low (~$0.30)',
       popular: urlChain === 'base',
       wallets: [
         { type: 'metamask' as WalletType, name: 'MetaMask', icon: '🦊', color: 'bg-orange-500' },
         { type: 'trustwallet' as WalletType, name: 'Trust Wallet', icon: '🛡️', color: 'bg-blue-500' },
       ]
     },
-    { 
-      id: 'arbitrum', 
-      name: 'Arbitrum', 
-      icon: '🔴', 
-      fee: 'Low (~$0.50)', 
+    {
+      id: 'arbitrum',
+      name: 'Arbitrum',
+      icon: '🔴',
+      fee: 'Low (~$0.50)',
       popular: urlChain === 'arbitrum',
       wallets: [
         { type: 'metamask' as WalletType, name: 'MetaMask', icon: '🦊', color: 'bg-orange-500' },
         { type: 'trustwallet' as WalletType, name: 'Trust Wallet', icon: '🛡️', color: 'bg-blue-500' },
       ]
     },
-    { 
-      id: 'solana', 
-      name: 'Solana', 
-      icon: '🟣', 
-      fee: 'Extremely Low (~$0.0001)', 
+    {
+      id: 'solana',
+      name: 'Solana',
+      icon: '🟣',
+      fee: 'Extremely Low (~$0.0001)',
       popular: urlChain === 'solana',
       wallets: [
         { type: 'phantom' as WalletType, name: 'Phantom', icon: '👻', color: 'bg-purple-500' },
@@ -141,7 +141,7 @@ const Checkout = () => {
 
   const connectWallet = async (walletType: WalletType) => {
     if (!selectedChain) return;
-    
+
     const success = await wallet.connect(walletType, selectedChain.id as WalletChainType);
     if (success) {
       setStep('payment');
@@ -160,30 +160,30 @@ const Checkout = () => {
     }
 
     setStep('processing');
-    
+
     try {
       // Start the real token transfer
       const txHash = await tokenTransfer.transferUSDT(
         selectedChain.id as ChainType,
         totalCrypto
       );
-      
+
       if (!txHash) {
         throw new Error('Transaction failed');
       }
-      
+
       setEscrowCreated(true);
       setTxHash(txHash);
-      
+
       // Wait a moment for UI feedback
       await new Promise(resolve => setTimeout(resolve, 1500));
       setStep('success');
-      
+
       toast.success('Payment completed successfully!');
     } catch (error: any) {
       console.error('Payment error:', error);
       setStep('failed');
-      
+
       // Don't show duplicate toast if already shown by transfer hook
       if (!error.message?.includes('rejected')) {
         toast.error(error.message || 'Payment failed. Please try again.');
@@ -294,9 +294,8 @@ const Checkout = () => {
                       setSelectedChain(chain);
                       setStep('wallet-connect');
                     }}
-                    className={`w-full p-4 rounded-xl border-2 transition-all text-left hover:border-primary hover:shadow-md ${
-                      chain.popular ? 'border-primary bg-primary/5' : 'border-border hover:bg-accent/50'
-                    }`}
+                    className={`w-full p-4 rounded-xl border-2 transition-all text-left hover:border-primary hover:shadow-md ${chain.popular ? 'border-primary bg-primary/5' : 'border-border hover:bg-accent/50'
+                      }`}
                   >
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3">
@@ -520,10 +519,10 @@ const Checkout = () => {
 
               <div>
                 <h3 className="text-xl font-bold text-foreground mb-2">
-                  {tokenTransfer.status === 'pending' 
-                    ? 'Confirm in Wallet...' 
-                    : escrowCreated 
-                      ? 'Transaction Submitted!' 
+                  {tokenTransfer.status === 'pending'
+                    ? 'Confirm in Wallet...'
+                    : escrowCreated
+                      ? 'Transaction Submitted!'
                       : 'Processing Payment...'}
                 </h3>
                 <p className="text-muted-foreground">
