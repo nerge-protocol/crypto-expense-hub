@@ -1,13 +1,16 @@
 import { useState, useCallback } from 'react';
 import { toast } from 'sonner';
+import { parseUnits } from 'viem';
 import { 
-  USDT_ADDRESSES, 
+  SupportedChain,
+  TokenSymbol,
   MERCHANT_ADDRESSES, 
-  ERC20_ABI, 
-  parseUSDTAmount,
-  getExplorerTxUrl 
-} from '@/lib/usdt-contracts';
-import type { ChainType } from '@/types/merchant';
+  getTokenAddress,
+  getTokenDecimals,
+  getExplorerTxUrl,
+  getCurrentRpcUrl,
+  NETWORK_ENV,
+} from '@/lib/chains-config';
 
 interface TransferState {
   isTransferring: boolean;
@@ -17,9 +20,9 @@ interface TransferState {
 }
 
 interface UseTokenTransferReturn extends TransferState {
-  transferUSDT: (chain: ChainType, amount: string, merchantAddress?: string) => Promise<string | null>;
+  transferToken: (chain: SupportedChain, token: TokenSymbol, amount: string, merchantAddress?: string) => Promise<string | null>;
   reset: () => void;
-  getExplorerUrl: (chain: ChainType, hash: string) => string;
+  getExplorerUrl: (chain: SupportedChain, hash: string) => string;
 }
 
 export function useTokenTransfer(): UseTokenTransferReturn {
@@ -30,9 +33,16 @@ export function useTokenTransfer(): UseTokenTransferReturn {
     status: 'idle',
   });
 
-  // Transfer USDT on EVM chains (Base, Arbitrum)
+  // Parse token amount with correct decimals
+  const parseTokenAmount = (amount: string, chain: SupportedChain, token: TokenSymbol): bigint => {
+    const decimals = getTokenDecimals(chain, token);
+    return parseUnits(amount, decimals);
+  };
+
+  // Transfer on EVM chains (Ethereum, Base, Arbitrum)
   const transferEVM = useCallback(async (
-    chain: ChainType,
+    chain: SupportedChain,
+    token: TokenSymbol,
     amount: string,
     merchantAddress: string
   ): Promise<string> => {
@@ -41,10 +51,14 @@ export function useTokenTransfer(): UseTokenTransferReturn {
       throw new Error('No wallet detected');
     }
 
-    const usdtAddress = USDT_ADDRESSES[chain];
-    const parsedAmount = parseUSDTAmount(amount, chain);
+    const tokenAddress = getTokenAddress(chain, token);
+    if (!tokenAddress) {
+      throw new Error(`${token} not available on ${chain}`);
+    }
 
-    // Encode the transfer function call
+    const parsedAmount = parseTokenAmount(amount, chain, token);
+
+    // Encode the transfer function call (ERC20 transfer)
     const transferData = `0xa9059cbb${merchantAddress.slice(2).padStart(64, '0')}${parsedAmount.toString(16).padStart(64, '0')}`;
 
     const accounts = await ethereum.request({ method: 'eth_accounts' });
@@ -57,17 +71,17 @@ export function useTokenTransfer(): UseTokenTransferReturn {
       method: 'eth_sendTransaction',
       params: [{
         from: accounts[0],
-        to: usdtAddress,
+        to: tokenAddress,
         data: transferData,
-        // Gas will be estimated by the wallet
       }],
     });
 
     return txHash;
   }, []);
 
-  // Transfer USDT on Tron (TRC20)
+  // Transfer on Tron (TRC20)
   const transferTron = useCallback(async (
+    token: TokenSymbol,
     amount: string,
     merchantAddress: string
   ): Promise<string> => {
@@ -76,11 +90,15 @@ export function useTokenTransfer(): UseTokenTransferReturn {
       throw new Error('TronLink not detected');
     }
 
-    const usdtAddress = USDT_ADDRESSES.tron;
-    const parsedAmount = parseUSDTAmount(amount, 'tron');
+    const tokenAddress = getTokenAddress('tron', token);
+    if (!tokenAddress) {
+      throw new Error(`${token} not available on Tron`);
+    }
+
+    const parsedAmount = parseTokenAmount(amount, 'tron', token);
 
     // Create the contract instance
-    const contract = await tronWeb.contract().at(usdtAddress);
+    const contract = await tronWeb.contract().at(tokenAddress);
     
     // Call the transfer function
     const result = await contract.transfer(merchantAddress, parsedAmount.toString()).send({
@@ -92,8 +110,9 @@ export function useTokenTransfer(): UseTokenTransferReturn {
     return result;
   }, []);
 
-  // Transfer USDT on Solana (SPL Token)
+  // Transfer on Solana (SPL Token)
   const transferSolana = useCallback(async (
+    token: TokenSymbol,
     amount: string,
     merchantAddress: string
   ): Promise<string> => {
@@ -102,23 +121,26 @@ export function useTokenTransfer(): UseTokenTransferReturn {
       throw new Error('Phantom wallet not detected');
     }
 
-    // For Solana SPL transfers, we need @solana/web3.js and @solana/spl-token
-    // This is a simplified version - in production, you'd use proper SPL token transfer
-    
+    const tokenAddress = getTokenAddress('solana', token);
+    if (!tokenAddress) {
+      throw new Error(`${token} not available on Solana`);
+    }
+
     // Import required modules dynamically
     const { Connection, PublicKey, Transaction } = await import('@solana/web3.js');
     const { getAssociatedTokenAddress, createTransferInstruction, TOKEN_PROGRAM_ID } = await import('@solana/spl-token');
     
-    const connection = new Connection('https://api.mainnet-beta.solana.com', 'confirmed');
-    const usdtMint = new PublicKey(USDT_ADDRESSES.solana);
+    const rpcUrl = getCurrentRpcUrl('solana');
+    const connection = new Connection(rpcUrl, 'confirmed');
+    const tokenMint = new PublicKey(tokenAddress);
     const fromPubkey = new PublicKey(solana.publicKey.toString());
     const toPubkey = new PublicKey(merchantAddress);
     
     // Get associated token accounts
-    const fromTokenAccount = await getAssociatedTokenAddress(usdtMint, fromPubkey);
-    const toTokenAccount = await getAssociatedTokenAddress(usdtMint, toPubkey);
+    const fromTokenAccount = await getAssociatedTokenAddress(tokenMint, fromPubkey);
+    const toTokenAccount = await getAssociatedTokenAddress(tokenMint, toPubkey);
     
-    const parsedAmount = parseUSDTAmount(amount, 'solana');
+    const parsedAmount = parseTokenAmount(amount, 'solana', token);
     
     // Create transfer instruction
     const transferInstruction = createTransferInstruction(
@@ -150,8 +172,9 @@ export function useTokenTransfer(): UseTokenTransferReturn {
   }, []);
 
   // Main transfer function
-  const transferUSDT = useCallback(async (
-    chain: ChainType,
+  const transferToken = useCallback(async (
+    chain: SupportedChain,
+    token: TokenSymbol,
     amount: string,
     merchantAddress?: string
   ): Promise<string | null> => {
@@ -172,19 +195,19 @@ export function useTokenTransfer(): UseTokenTransferReturn {
     try {
       let txHash: string;
 
-      setState(prev => ({ ...prev, status: 'pending' }));
       toast.info('Please confirm the transaction in your wallet...');
 
       switch (chain) {
+        case 'ethereum':
         case 'base':
         case 'arbitrum':
-          txHash = await transferEVM(chain, amount, toAddress);
+          txHash = await transferEVM(chain, token, amount, toAddress);
           break;
         case 'tron':
-          txHash = await transferTron(amount, toAddress);
+          txHash = await transferTron(token, amount, toAddress);
           break;
         case 'solana':
-          txHash = await transferSolana(amount, toAddress);
+          txHash = await transferSolana(token, amount, toAddress);
           break;
         default:
           throw new Error(`Unsupported chain: ${chain}`);
@@ -234,14 +257,14 @@ export function useTokenTransfer(): UseTokenTransferReturn {
     });
   }, []);
 
-  const getExplorerUrl = useCallback((chain: ChainType, hash: string) => {
+  const getExplorerUrlFn = useCallback((chain: SupportedChain, hash: string) => {
     return getExplorerTxUrl(chain, hash);
   }, []);
 
   return {
     ...state,
-    transferUSDT,
+    transferToken,
     reset,
-    getExplorerUrl,
+    getExplorerUrl: getExplorerUrlFn,
   };
 }
