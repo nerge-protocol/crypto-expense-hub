@@ -43,12 +43,15 @@ interface Chain {
 
 type Step = 'initial' | 'wallet-connect' | 'payment' | 'processing' | 'success' | 'failed';
 
+let BACKEND_URL = 'http://localhost:4000';
+
 const Checkout = () => {
   const [searchParams] = useSearchParams();
   const wallet = useWallet();
   const tokenTransfer = useTokenTransfer();
 
   // Parse URL parameters
+  const paymentId = searchParams.get('paymentId');
   const urlAmount = searchParams.get('amount');
   const urlCurrency = searchParams.get('currency');
   const urlChain = searchParams.get('chain') as SupportedChain | null;
@@ -60,24 +63,85 @@ const Checkout = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [selectedToken, setSelectedToken] = useState<TokenSymbol>(urlToken || 'USDC');
 
+  // Payment Data State
+  const [paymentData, setPaymentData] = useState<PaymentData | null>(null);
+  const [loadingPayment, setLoadingPayment] = useState(false);
+  const [paymentError, setPaymentError] = useState<string | null>(null);
+  const [fetchedPaymentData, setFetchedPaymentData] = useState<any>(null);
+
   const { createEscrow, loading, error } = useEscrow();
 
-  // Payment data from URL params or defaults
-  const paymentData = useMemo<PaymentData>(() => ({
-    merchantName: "Tech Store Nigeria",
-    merchantLogo: "https://via.placeholder.com/100x100/4F46E5/FFFFFF?text=TS",
-    amount: urlAmount ? parseFloat(urlAmount) : 50000,
-    currency: urlCurrency || "NGN",
-    reference: urlRef || "TXN-" + Date.now(),
-    email: urlEmail || "customer@example.com",
-    description: urlDesc || undefined,
-    publicKey: "pk_test_xxxxxxxxxxxxx",
-    callbackUrl: "https://merchant.com/verify",
-    metadata: {
-      orderId: "ORD-12345",
-      customerName: "John Doe"
+  // Fetch payment details if paymentId is present
+  useEffect(() => {
+    const fetchPaymentDetails = async () => {
+      if (!paymentId) return;
+
+      setLoadingPayment(true);
+      setPaymentError(null);
+
+      try {
+        const response = await fetch(`${BACKEND_URL}/checkout/payment/${paymentId}`);
+        if (!response.ok) {
+          throw new Error('Failed to load payment details');
+        }
+
+        const data = await response.json();
+        console.log("DATA>>>>>>>>>", data);
+        setFetchedPaymentData(data);
+
+        setPaymentData({
+          merchantName: data.merchant.name,
+          merchantLogo: data.merchant.logo || "https://via.placeholder.com/100x100/4F46E5/FFFFFF?text=TS",
+          amount: data.payment.amount,
+          currency: data.payment.currency,
+          reference: data.payment.reference,
+          email: data.payment.email,
+          description: data.payment.metadata?.description,
+          publicKey: "pk_test_placeholder", // Backend should probably return this too if needed
+          callbackUrl: data.payment.metadata?.callbackUrl || "https://merchant.com/verify",
+          metadata: data.payment.metadata || {}
+        });
+
+      } catch (err: any) {
+        console.error('Error fetching payment:', err);
+        setPaymentError(err.message || 'Could not load payment details');
+      } finally {
+        setLoadingPayment(false);
+      }
+    };
+
+    if (paymentId) {
+      fetchPaymentDetails();
+    } else {
+      // Fallback to URL params if paymentId is missing
+      if (urlAmount && urlCurrency) {
+        setPaymentData({
+          merchantName: "Tech Store Nigeria",
+          merchantLogo: "https://via.placeholder.com/100x100/4F46E5/FFFFFF?text=TS",
+          amount: parseFloat(urlAmount),
+          currency: urlCurrency,
+          reference: urlRef || "TXN-" + Date.now(),
+          email: urlEmail || "customer@example.com",
+          description: urlDesc || undefined,
+          publicKey: "pk_test_xxxxxxxxxxxxx",
+          callbackUrl: "https://merchant.com/verify",
+          metadata: {
+            orderId: "ORD-12345",
+            customerName: "John Doe"
+          }
+        });
+      } else {
+        // No paymentId and no valid URL params - wait for user input or show default demo data ONLY if it's a demo flow
+        // For now, we initialize with default demo data just to keep the "Demo" vibe alive if accessed directly without params
+        // But for production logic as requested: "if not, throw an error"
+        // setPaymentError('Invalid payment link');
+
+        // Keeping demo data logic for now as per "Demo" title in UI, but in a real scenario we'd error out.
+        // Let's stick to the requested logic: throw error if no params.
+        setPaymentError('Invalid payment link. Please provide payment details.');
+      }
     }
-  }), [urlAmount, urlCurrency, urlRef, urlDesc, urlEmail]);
+  }, [paymentId, urlAmount, urlCurrency, urlRef, urlDesc, urlEmail]);
 
   // Build chains from configuration
   const chains: Chain[] = useMemo(() => {
@@ -104,9 +168,10 @@ const Checkout = () => {
   const [timeLeft, setTimeLeft] = useState(600);
 
   const usdtRate = 1420;
-  const cryptoAmount = (paymentData.amount / usdtRate).toFixed(2);
-  const platformFee = (parseFloat(cryptoAmount) * 0.015).toFixed(2);
-  const totalCrypto = (parseFloat(cryptoAmount) + parseFloat(platformFee)).toFixed(2);
+  // Calculate derived values only when paymentData is available
+  const cryptoAmount = paymentData ? (paymentData.amount / usdtRate).toFixed(2) : '0.00';
+  const platformFee = paymentData ? (parseFloat(cryptoAmount) * 0.015).toFixed(2) : '0.00';
+  const totalCrypto = paymentData ? (parseFloat(cryptoAmount) + parseFloat(platformFee)).toFixed(2) : '0.00';
 
   // Update selected token when chain changes
   useEffect(() => {
@@ -148,36 +213,65 @@ const Checkout = () => {
     category: string;
   }) => {
     try {
-      // 1. Call backend to initiate payment
-      const response = await fetch('/api/payments/initiate-payment-intent', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          amount: parseFloat(params.amount) * 1420, // NGN amount
-          token: 'USDT',
-          chain: 'arbitrum'
-        })
-      });
+      let pId = '';
+      let pData;
 
-      const paymentData = await response.json();
+      if (paymentId && fetchedPaymentData) {
+        pId = paymentId;
+        pData = fetchedPaymentData;
+
+        if (!pData.payment.onchainReference) {
+          throw new Error('Payment onchain reference not found');
+        }
+      } else {
+        // 1. Call backend to initiate payment
+        const response = await fetch(`${BACKEND_URL}/api/payments/initiate-payment-intent`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            amount: parseFloat(params.amount) * 1420, // NGN amount
+            token: 'USDT',
+            chain: 'arbitrum'
+          })
+        });
+
+        const data = await response.json();
+        console.log("DATA>>>>>>>>>", data);
+        pId = data.data.id;
+        pData = data.data;
+      }
+
+      // const response = await fetch('/api/payments/initiate-payment-intent', {
+      //   method: 'POST',
+      //   headers: { 'Content-Type': 'application/json' },
+      //   body: JSON.stringify({
+      //     amount: parseFloat(params.amount) * 1420, // NGN amount
+      //     token: 'USDT',
+      //     chain: 'arbitrum'
+      //   })
+      // });
+
+      // const paymentData = await response.json();
 
       // 2. Create escrow on-chain
       const arbitrum = getContractByName(params.chain); // 'arbitrum'
       const result = await createEscrow(
         arbitrum.usdt,
         params.amount, // Crypto amount
-        paymentData.data.reference, // Payment ID from backend
+        pData.payment.onchainReference, // Payment ID from backend
         params.category
       );
       console.log("RESULT>>>>>>>>>", result);
 
 
       // 3. Confirm escrow creation with backend
-      await fetch(`/api/payments/${paymentData.data.reference}/confirm-escrow-and-transfer`, {
+      await fetch(`${BACKEND_URL}/checkout/payment/${pId}/complete`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          onchainEscrowId: result.escrowId,
+          escrowId: result.escrowId,
+          chain: params.chain,
+          cryptoAmount: params.amount,
           txHash: result.txHash
         })
       });
@@ -263,34 +357,54 @@ const Checkout = () => {
         <div className="text-center">
           <h1 className="text-4xl font-bold text-foreground mb-4">Crypto Payment Widget Demo</h1>
           <p className="text-muted-foreground mb-8">Paystack-like checkout experience for crypto payments</p>
+
           <button
             onClick={() => setIsOpen(true)}
-            className="gradient-primary text-primary-foreground px-8 py-4 rounded-xl font-semibold text-lg hover:shadow-2xl hover:scale-105 transition-all"
+            disabled={loadingPayment || !!paymentError}
+            className="gradient-primary text-primary-foreground px-8 py-4 rounded-xl font-semibold text-lg hover:shadow-2xl hover:scale-105 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            Open Payment Widget
+            {loadingPayment ? (
+              <span className="flex items-center gap-2">
+                <Loader2 className="animate-spin" /> Loading...
+              </span>
+            ) : paymentError ? (
+              "Payment Unavailable"
+            ) : (
+              "Open Payment Widget"
+            )}
           </button>
 
-          <div className="mt-12 bg-card/50 backdrop-blur-sm rounded-2xl p-6 max-w-md mx-auto border border-border">
-            <h3 className="text-foreground font-semibold mb-4">Payment Details:</h3>
-            <div className="space-y-2 text-left text-muted-foreground text-sm">
-              <div className="flex justify-between">
-                <span>Merchant:</span>
-                <span className="text-foreground font-medium">{paymentData.merchantName}</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Amount:</span>
-                <span className="text-foreground font-medium">₦{paymentData.amount.toLocaleString()}</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Reference:</span>
-                <span className="text-foreground font-medium text-xs">{paymentData.reference}</span>
+          {paymentError && (
+            <div className="mt-4 p-4 bg-destructive/10 text-destructive rounded-xl border border-destructive/20 max-w-md mx-auto">
+              <p className="font-medium">{paymentError}</p>
+            </div>
+          )}
+
+          {paymentData && (
+            <div className="mt-12 bg-card/50 backdrop-blur-sm rounded-2xl p-6 max-w-md mx-auto border border-border">
+              <h3 className="text-foreground font-semibold mb-4">Payment Details:</h3>
+              <div className="space-y-2 text-left text-muted-foreground text-sm">
+                <div className="flex justify-between">
+                  <span>Merchant:</span>
+                  <span className="text-foreground font-medium">{paymentData.merchantName}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Amount:</span>
+                  <span className="text-foreground font-medium">₦{paymentData.amount.toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Reference:</span>
+                  <span className="text-foreground font-medium text-xs">{paymentData.reference}</span>
+                </div>
               </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
     );
   }
+
+  if (!paymentData) return null;
 
   return (
     <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in">
