@@ -1,9 +1,10 @@
-import { mockSettlements } from '@/lib/mock-data';
+import { useMerchantSettlements } from '@/hooks/useMerchant';
 import { StatusBadge } from '@/components/StatusBadge';
 import { formatDistanceToNow } from 'date-fns';
-import { ExternalLink, Copy, ArrowDownToLine } from 'lucide-react';
+import { ExternalLink, Copy, ArrowDownToLine, Loader2, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
+import { Skeleton } from '@/components/ui/skeleton';
 
 function formatCurrency(amount: number): string {
   return new Intl.NumberFormat('en-NG', {
@@ -15,18 +16,47 @@ function formatCurrency(amount: number): string {
 }
 
 export default function Settlements() {
+  const { data: settlements, isLoading, error } = useMerchantSettlements();
+
   const copyToClipboard = (text: string, label: string) => {
     navigator.clipboard.writeText(text);
     toast.success(`${label} copied to clipboard`);
   };
 
-  const totalSettled = mockSettlements
-    .filter(s => s.status === 'completed')
-    .reduce((sum, s) => sum + s.amount, 0);
+  if (isLoading) {
+    return (
+      <div className="space-y-6 animate-fade-in">
+        <div>
+          <Skeleton className="h-10 w-1/3 mb-2" />
+          <Skeleton className="h-4 w-1/4" />
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <Skeleton className="h-32 rounded-xl" />
+          <Skeleton className="h-32 rounded-xl" />
+          <Skeleton className="h-32 rounded-xl" />
+        </div>
+        <Skeleton className="h-[400px] rounded-xl" />
+      </div>
+    );
+  }
 
-  const pendingAmount = mockSettlements
+  if (error || !settlements) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px] text-center">
+        <AlertCircle className="w-12 h-12 text-destructive mb-4" />
+        <h3 className="text-lg font-semibold">Failed to load settlements</h3>
+        <p className="text-muted-foreground">Please try refreshing the page</p>
+      </div>
+    );
+  }
+
+  const totalSettled = settlements
+    .filter(s => s.status === 'completed')
+    .reduce((sum, s) => sum + Number(s.amount), 0);
+
+  const pendingAmount = settlements
     .filter(s => s.status === 'pending')
-    .reduce((sum, s) => sum + s.amount, 0);
+    .reduce((sum, s) => sum + Number(s.amount), 0);
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -83,9 +113,9 @@ export default function Settlements() {
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {mockSettlements.map((settlement, index) => (
-                <tr 
-                  key={settlement.id} 
+              {settlements.map((settlement, index) => (
+                <tr
+                  key={settlement.id}
                   className="transition-colors hover:bg-muted/20 animate-fade-in"
                   style={{ animationDelay: `${index * 50}ms` }}
                 >
@@ -101,14 +131,12 @@ export default function Settlements() {
                     <span className="font-semibold">{formatCurrency(settlement.amount)}</span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${
-                      settlement.status === 'completed' 
-                        ? 'bg-success/15 text-success border-success/30' 
+                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${settlement.status === 'completed'
+                        ? 'bg-success/15 text-success border-success/30'
                         : 'bg-warning/15 text-warning border-warning/30'
-                    }`}>
-                      <span className={`w-1.5 h-1.5 rounded-full ${
-                        settlement.status === 'completed' ? 'bg-success' : 'bg-warning animate-pulse'
-                      }`} />
+                      }`}>
+                      <span className={`w-1.5 h-1.5 rounded-full ${settlement.status === 'completed' ? 'bg-success' : 'bg-warning animate-pulse'
+                        }`} />
                       {settlement.status === 'completed' ? 'Completed' : 'Pending'}
                     </span>
                   </td>
@@ -121,7 +149,7 @@ export default function Settlements() {
                     {settlement.transferReference ? (
                       <div className="flex items-center gap-2">
                         <span className="font-mono text-sm">{settlement.transferReference}</span>
-                        <button 
+                        <button
                           onClick={() => copyToClipboard(settlement.transferReference!, 'Transfer reference')}
                           className="text-muted-foreground hover:text-foreground transition-colors"
                         >

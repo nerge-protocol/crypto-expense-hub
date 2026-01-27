@@ -3,8 +3,10 @@ import { useAuth } from '@/hooks/useAuth';
 import { StatsCard } from '@/components/StatsCard';
 import { PaymentTable } from '@/components/PaymentTable';
 import { RevenueChart } from '@/components/RevenueChart';
-import { mockPayments, getAnalytics } from '@/lib/mock-data';
-import { DollarSign, ArrowUpRight, TrendingUp, Clock, CheckCircle2 } from 'lucide-react';
+import { mockPayments } from '@/lib/mock-data';
+import { useMerchantAnalytics } from '@/hooks/useMerchant';
+import { DollarSign, ArrowUpRight, TrendingUp, Clock, AlertCircle } from 'lucide-react';
+import { Skeleton } from '@/components/ui/skeleton';
 
 function formatCurrency(amount: number): string {
   if (amount >= 1000000) {
@@ -19,8 +21,38 @@ function formatCurrency(amount: number): string {
 export default function Dashboard() {
   const { merchantData } = useAuth();
   const navigate = useNavigate();
-  const analytics = getAnalytics();
+
+  const { data: analytics, isLoading, error } = useMerchantAnalytics();
+
+  // TODO: Replace recentPayments with real data query once available or use separate hook
   const recentPayments = mockPayments.slice(0, 8);
+
+  if (isLoading) {
+    return (
+      <div className="space-y-8 animate-fade-in">
+        <div className="space-y-2">
+          <Skeleton className="h-10 w-1/3" />
+          <Skeleton className="h-4 w-1/4" />
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          {[1, 2, 3, 4].map((i) => (
+            <Skeleton key={i} className="h-32 rounded-xl" />
+          ))}
+        </div>
+        <Skeleton className="h-[400px] rounded-xl" />
+      </div>
+    );
+  }
+
+  if (error || !analytics) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px] text-center">
+        <AlertCircle className="w-12 h-12 text-destructive mb-4" />
+        <h3 className="text-lg font-semibold">Failed to load dashboard data</h3>
+        <p className="text-muted-foreground">Please try refreshing the page</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8 animate-fade-in">
@@ -75,10 +107,10 @@ export default function Dashboard() {
             <p className="text-sm text-muted-foreground">Latest transactions from your customers</p>
           </div>
         </div>
-        
-        <PaymentTable 
-          payments={recentPayments} 
-          showViewAll 
+
+        <PaymentTable
+          payments={recentPayments}
+          showViewAll
           onViewAll={() => navigate('/payments')}
         />
       </div>

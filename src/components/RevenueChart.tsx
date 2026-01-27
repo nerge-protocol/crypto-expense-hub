@@ -1,7 +1,7 @@
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 interface RevenueChartProps {
-  data: Array<{ date: string; amount: number; count: number }>;
+  data: Array<{ date: string; amount: number; count?: number }>;
 }
 
 function formatCurrency(amount: number): string {
@@ -21,7 +21,7 @@ export function RevenueChart({ data }: RevenueChartProps) {
         <h3 className="text-lg font-semibold">Revenue Overview</h3>
         <p className="text-sm text-muted-foreground">Last 7 days performance</p>
       </div>
-      
+
       <div className="h-[300px]">
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
@@ -32,15 +32,15 @@ export function RevenueChart({ data }: RevenueChartProps) {
               </linearGradient>
             </defs>
             <CartesianGrid strokeDasharray="3 3" stroke="hsl(222, 47%, 16%)" vertical={false} />
-            <XAxis 
-              dataKey="date" 
-              stroke="hsl(215, 20%, 65%)" 
+            <XAxis
+              dataKey="date"
+              stroke="hsl(215, 20%, 65%)"
               fontSize={12}
               tickLine={false}
               axisLine={false}
             />
-            <YAxis 
-              stroke="hsl(215, 20%, 65%)" 
+            <YAxis
+              stroke="hsl(215, 20%, 65%)"
               fontSize={12}
               tickLine={false}
               axisLine={false}

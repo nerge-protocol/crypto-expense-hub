@@ -131,3 +131,19 @@ export const STATUS_CONFIG: Record<PaymentStatus, { label: string; variant: 'suc
   failed: { label: 'Failed', variant: 'destructive' },
   cancelled: { label: 'Cancelled', variant: 'secondary' },
 };
+
+export interface PaymentLink {
+  id: string;
+  name: string;
+  slug: string;
+  amount: number;
+  currency: string;
+  reference?: string;
+  chain?: ChainType;
+  description?: string;
+  customerEmail?: string;
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+  url: string;
+}
