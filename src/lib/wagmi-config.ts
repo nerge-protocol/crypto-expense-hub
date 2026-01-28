@@ -3,7 +3,7 @@ import { base, arbitrum, mainnet } from 'wagmi/chains';
 import { injected, walletConnect } from 'wagmi/connectors';
 
 // WalletConnect project ID - in production, use your own from https://cloud.walletconnect.com
-const projectId = 'demo-project-id';
+const projectId = '3fbb6bba6f1de962d911bb5b5c9dba88';
 
 export const config = createConfig({
   chains: [mainnet, base, arbitrum],

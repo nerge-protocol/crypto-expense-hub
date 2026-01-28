@@ -52,6 +52,7 @@ const Checkout = () => {
 
   // Parse URL parameters
   const paymentId = searchParams.get('paymentId');
+  const slug = searchParams.get('ref');
   const urlAmount = searchParams.get('amount');
   const urlCurrency = searchParams.get('currency');
   const urlChain = searchParams.get('chain') as SupportedChain | null;
@@ -110,8 +111,47 @@ const Checkout = () => {
       }
     };
 
+    const fetchPaymentLinkBySlug = async () => {
+      if (!slug) return;
+
+      setLoadingPayment(true);
+      setPaymentError(null);
+
+      try {
+        const response = await fetch(`${BACKEND_URL}/checkout/payment-link/${slug}`);
+        if (!response.ok) {
+          throw new Error('Failed to load payment details');
+        }
+
+        const data = await response.json();
+        console.log("DATA>>>>>>>>>", data);
+        setFetchedPaymentData(data);
+
+        setPaymentData({
+          merchantName: data.merchant.name,
+          merchantLogo: data.merchant.logo || "https://via.placeholder.com/100x100/4F46E5/FFFFFF?text=TS",
+          amount: data.amount,
+          currency: data.currency,
+          reference: `${"PLNK-" + slug + "-" + Date.now()}`,
+          email: data.email,
+          description: data.description,
+          publicKey: "pk_test_placeholder", // Backend should probably return this too if needed
+          callbackUrl: data.callbackUrl || "https://merchant.com/verify",
+          metadata: data.metadata || {}
+        });
+
+      } catch (err: any) {
+        console.error('Error fetching payment:', err);
+        setPaymentError(err.message || 'Could not load payment details');
+      } finally {
+        setLoadingPayment(false);
+      }
+    };
+
     if (paymentId) {
       fetchPaymentDetails();
+    } else if (slug) {
+      fetchPaymentLinkBySlug();
     } else {
       // Fallback to URL params if paymentId is missing
       if (urlAmount && urlCurrency) {
@@ -225,20 +265,36 @@ const Checkout = () => {
         }
       } else {
         // 1. Call backend to initiate payment
-        const response = await fetch(`${BACKEND_URL}/api/payments/initiate-payment-intent`, {
+        const response = await fetch(`${BACKEND_URL}/checkout/payment/initialize-by-slug/${slug}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            amount: parseFloat(params.amount) * 1420, // NGN amount
-            token: 'USDT',
-            chain: 'arbitrum'
+            reference: paymentData.reference,
+            callbackUrl: 'https://merchant.com/verify',
+            metadata: {
+              orderId: 'ORD-12345',
+              customerName: 'John Doe'
+            }
           })
         });
 
+        if (!response.ok) {
+          throw new Error('Failed to initiate payment');
+        }
+
         const data = await response.json();
         console.log("DATA>>>>>>>>>", data);
-        pId = data.data.id;
-        pData = data.data;
+
+        if (!data.payment.id) {
+          throw new Error('Payment ID not found');
+        }
+
+        if (!data.payment.onchainReference) {
+          throw new Error('Payment onchain reference not found');
+        }
+
+        pId = data.payment.id;
+        pData = data;
       }
 
       // const response = await fetch('/api/payments/initiate-payment-intent', {

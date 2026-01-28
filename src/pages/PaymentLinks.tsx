@@ -13,6 +13,8 @@ import { ChainType, CHAIN_CONFIG } from '@/types/merchant';
 import { usePaymentLinks, useCreatePaymentLink, useDeletePaymentLink } from '@/hooks/useMerchant';
 import { Skeleton } from '@/components/ui/skeleton';
 
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8080'; // 'https://checkout.synledger.com';
+
 const PaymentLinks = () => {
   const { data: links, isLoading, error } = usePaymentLinks();
   const createLink = useCreatePaymentLink();
@@ -260,18 +262,18 @@ const PaymentLinks = () => {
 
                     <div className="flex items-center gap-2 p-2 rounded bg-background border border-border">
                       <code className="text-xs flex-1 truncate text-muted-foreground">
-                        {window.location.origin + '/checkout?ref=' + link.slug /* Simple URL construction for now, backend provides full URL usually but let's use slug */}
+                        {/*window.location.origin + '/checkout?ref=' + link.slug /* Simple URL construction for now, backend provides full URL usually but let's use slug */}
                         {/* Actually PaymentLink entity has `slug` but frontend uses full URL? */}
                         {/* Let's assume link object has full url if backend provides it, otherwise construct it */}
                         {/* The mock had `url`, my DTO has `url`. So let's rely on `link.url` if present, else construct */}
-                        {link.url || `https://checkout.synledger.com/${link.slug}`}
+                        {link.url || `${BACKEND_URL}/checkout?ref=${link.slug}`}
                       </code>
                       <div className="flex gap-1 flex-shrink-0">
                         <Button
                           variant="ghost"
                           size="icon"
                           className="h-8 w-8"
-                          onClick={() => copyToClipboard(link.url || `https://checkout.synledger.com/${link.slug}`, link.id)}
+                          onClick={() => copyToClipboard(link.url || `${BACKEND_URL}/checkout?ref=${link.slug}`, link.id)}
                         >
                           {copiedId === link.id ? (
                             <Check className="h-4 w-4 text-success" />
@@ -298,7 +300,7 @@ const PaymentLinks = () => {
                               <div className="p-4 bg-white rounded-xl shadow-lg">
                                 <QRCodeSVG
                                   id={`qr-${link.id}`}
-                                  value={link.url || `https://checkout.synledger.com/${link.slug}`}
+                                  value={link.url || `${BACKEND_URL}/checkout?ref=${link.slug}`}
                                   size={200}
                                   level="H"
                                   includeMargin
@@ -318,7 +320,7 @@ const PaymentLinks = () => {
                                 <Button
                                   variant="outline"
                                   className="flex-1"
-                                  onClick={() => copyToClipboard(link.url || `https://checkout.synledger.com/${link.slug}`, link.id)}
+                                  onClick={() => copyToClipboard(link.url || `${BACKEND_URL}/checkout?ref=${link.slug}`, link.id)}
                                 >
                                   {copiedId === link.id ? (
                                     <>
@@ -371,7 +373,7 @@ const PaymentLinks = () => {
                           className="h-8 w-8"
                           asChild
                         >
-                          <a href={link.url || `https://checkout.synledger.com/${link.slug}`} target="_blank" rel="noopener noreferrer">
+                          <a href={link.url || `${BACKEND_URL}/checkout?ref=${link.slug}`} target="_blank" rel="noopener noreferrer">
                             <ExternalLink className="h-4 w-4" />
                           </a>
                         </Button>
