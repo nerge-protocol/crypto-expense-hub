@@ -13,7 +13,7 @@ import { ChainType, CHAIN_CONFIG } from '@/types/merchant';
 import { usePaymentLinks, useCreatePaymentLink, useDeletePaymentLink } from '@/hooks/useMerchant';
 import { Skeleton } from '@/components/ui/skeleton';
 
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8080'; // 'https://checkout.synledger.com';
+const BACKEND_URL = window.location.origin // import.meta.env.VITE_BACKEND_URL || 'http://localhost:8080'; // 'https://checkout.synledger.com';
 
 const PaymentLinks = () => {
   const { data: links, isLoading, error } = usePaymentLinks();
