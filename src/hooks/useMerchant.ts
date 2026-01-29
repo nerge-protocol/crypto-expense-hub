@@ -150,4 +150,21 @@ export function useRegenerateApiKeys() {
         },
         onError: () => toast.error('Failed to regenerate API keys'),
     });
+}// Exchange Rate
+interface ExchangeRateResponse {
+    token: string;
+    currency: string;
+    marketRate: number;
+    spread: number;
+    effectiveRate: number;
+    timestamp: number;
+    expiresAt: number;
+}
+
+export function useExchangeRate(token: string = 'USDT', currency: string = 'NGN') {
+    return useQuery({
+        queryKey: ['exchange-rate', token, currency],
+        queryFn: () => api.get<ExchangeRateResponse>(`/exchange-rate/current/${currency}`),
+        refetchInterval: 60000, // Refresh every 60 seconds
+    });
 }
