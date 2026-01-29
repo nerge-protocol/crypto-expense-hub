@@ -317,8 +317,10 @@ const Checkout = () => {
 
       // 2. Create escrow on-chain
       // const arbitrum = getContractByName(params.chain); // e.g 'arbitrum'
+      const arbitrum = getContractByName(params.chain); // e.g 'arbitrum'
+      console.log("ARBITRUM>>>>>>>>>", arbitrum.usdt, arbitrum.usdc, selectedToken);
       const result = await createEscrow(
-        selectedToken,
+        arbitrum[selectedToken.toLowerCase()],
         params.amount, // Crypto amount
         pData.payment.onchainReference, // Payment ID from backend
         params.category
@@ -418,8 +420,8 @@ const Checkout = () => {
     return (
       <div className="min-h-screen bg-gradient-to-br from-background via-secondary/10 to-background flex items-center justify-center p-4">
         <div className="text-center">
-          <h1 className="text-4xl font-bold text-foreground mb-4">Crypto Payment Widget Demo</h1>
-          <p className="text-muted-foreground mb-8">Paystack-like checkout experience for crypto payments</p>
+          <h1 className="text-4xl font-bold text-foreground mb-4">Synledger Crypto Payment Widget</h1>
+          <p className="text-muted-foreground mb-8">Checkout experience for crypto payments</p>
 
           <button
             onClick={() => setIsOpen(true)}
