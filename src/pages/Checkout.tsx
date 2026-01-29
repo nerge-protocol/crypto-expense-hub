@@ -317,8 +317,10 @@ const Checkout = () => {
 
       // 2. Create escrow on-chain
       // const arbitrum = getContractByName(params.chain); // e.g 'arbitrum'
+      const arbitrum = getContractByName(params.chain); // e.g 'arbitrum'
+      console.log("ARBITRUM>>>>>>>>>", arbitrum.usdt, arbitrum.usdc, selectedToken);
       const result = await createEscrow(
-        selectedToken,
+        arbitrum[selectedToken.toLowerCase()],
         params.amount, // Crypto amount
         pData.payment.onchainReference, // Payment ID from backend
         params.category
