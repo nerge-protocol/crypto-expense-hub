@@ -16,7 +16,7 @@ export default function Login() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!secretKey.trim()) {
       toast.error('Please enter your secret key');
       return;
@@ -33,14 +33,13 @@ export default function Login() {
     await new Promise(resolve => setTimeout(resolve, 1000));
 
     // Mock login - in production this would validate against the API
-    login(secretKey, {
-      businessName: 'Tech Store Nigeria',
-      email: 'merchant@techstore.ng',
-      testMode: secretKey.includes('test'),
-    });
+    const success = await login(secretKey);
 
-    toast.success('Welcome back!');
-    navigate('/dashboard');
+    if (success) {
+      toast.success('Welcome back!');
+      navigate('/dashboard');
+    }
+
     setIsLoading(false);
   };
 
@@ -54,7 +53,7 @@ export default function Login() {
       <div className="absolute top-4 right-4 z-10">
         <ThemeToggle />
       </div>
-      
+
       {/* Left side - Branding */}
       <div className="hidden lg:flex lg:w-1/2 flex-col justify-between p-12">
         <div>
@@ -139,8 +138,8 @@ export default function Login() {
                 </p>
               </div>
 
-              <Button 
-                type="submit" 
+              <Button
+                type="submit"
                 className="w-full h-12 gradient-primary text-white font-semibold hover:opacity-90 transition-opacity"
                 disabled={isLoading}
               >
@@ -159,8 +158,8 @@ export default function Login() {
             </form>
 
             <div className="mt-6 pt-6 border-t border-border">
-              <Button 
-                variant="ghost" 
+              <Button
+                variant="ghost"
                 className="w-full text-muted-foreground hover:text-foreground"
                 onClick={handleDemoLogin}
               >

@@ -1,8 +1,7 @@
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
 import { PaymentTable } from '@/components/PaymentTable';
-import { StatusBadge } from '@/components/StatusBadge';
-import { ChainBadge } from '@/components/ChainBadge';
-import { filterPayments } from '@/lib/mock-data';
+import { StatusBadge } from '@/components/StatusBadge'; // Keep if used or remove if not
+import { useMerchantPayments } from '@/hooks/useMerchant';
 import { PaymentStatus, ChainType, STATUS_CONFIG, CHAIN_CONFIG } from '@/types/merchant';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -21,14 +20,16 @@ export default function Payments() {
   const [chainFilter, setChainFilter] = useState<ChainType | 'all'>('all');
   const [searchQuery, setSearchQuery] = useState('');
 
-  const { payments, total } = useMemo(() => {
-    return filterPayments({
-      status: statusFilter === 'all' ? undefined : statusFilter,
-      chain: chainFilter === 'all' ? undefined : chainFilter,
-      search: searchQuery || undefined,
-      limit: 100,
-    });
-  }, [statusFilter, chainFilter, searchQuery]);
+  // Use the hook
+  const { data, isLoading } = useMerchantPayments({
+    status: statusFilter,
+    chain: chainFilter,
+    search: searchQuery,
+    limit: 100
+  });
+
+  const payments = data?.payments || [];
+  const total = data?.total || 0;
 
   const handleExport = () => {
     const csv = [
@@ -50,7 +51,7 @@ export default function Payments() {
     a.download = `payments-${Date.now()}.csv`;
     a.click();
     URL.revokeObjectURL(url);
-    
+
     toast.success('Payments exported successfully');
   };
 
@@ -89,7 +90,7 @@ export default function Payments() {
             className="pl-10 bg-muted/50"
           />
         </div>
-        
+
         <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as PaymentStatus | 'all')}>
           <SelectTrigger className="w-[160px] bg-muted/50">
             <SelectValue placeholder="Status" />

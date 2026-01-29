@@ -7,27 +7,21 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Copy, Check, Link, ExternalLink, Plus, Trash2, QrCode, Download } from 'lucide-react';
+import { Copy, Check, Link, ExternalLink, Plus, Trash2, QrCode, Download, Loader2, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { ChainType, CHAIN_CONFIG } from '@/types/merchant';
+import { usePaymentLinks, useCreatePaymentLink, useDeletePaymentLink } from '@/hooks/useMerchant';
+import { Skeleton } from '@/components/ui/skeleton';
 
-interface PaymentLink {
-  id: string;
-  name: string;
-  amount: number;
-  currency: string;
-  chain: ChainType;
-  description?: string;
-  customerEmail?: string;
-  reference: string;
-  url: string;
-  createdAt: Date;
-}
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8080'; // 'https://checkout.synledger.com';
 
 const PaymentLinks = () => {
-  const [links, setLinks] = useState<PaymentLink[]>([]);
+  const { data: links, isLoading, error } = usePaymentLinks();
+  const createLink = useCreatePaymentLink();
+  const deleteLinkHook = useDeletePaymentLink();
+
   const [copiedId, setCopiedId] = useState<string | null>(null);
-  
+
   // Form state
   const [name, setName] = useState('');
   const [amount, setAmount] = useState('');
@@ -36,86 +30,40 @@ const PaymentLinks = () => {
   const [description, setDescription] = useState('');
   const [customerEmail, setCustomerEmail] = useState('');
 
-  const generateReference = () => {
-    return 'PAY-' + Date.now().toString(36).toUpperCase() + Math.random().toString(36).substring(2, 6).toUpperCase();
-  };
-
-  const generateCheckoutUrl = (params: {
-    amount: number;
-    currency: string;
-    chain: ChainType;
-    reference: string;
-    description?: string;
-    email?: string;
-  }) => {
-    const baseUrl = window.location.origin + '/checkout';
-    const searchParams = new URLSearchParams();
-    
-    searchParams.set('amount', params.amount.toString());
-    searchParams.set('currency', params.currency);
-    searchParams.set('chain', params.chain);
-    searchParams.set('ref', params.reference);
-    
-    if (params.description) {
-      searchParams.set('desc', params.description);
-    }
-    if (params.email) {
-      searchParams.set('email', params.email);
-    }
-    
-    return `${baseUrl}?${searchParams.toString()}`;
-  };
-
   const handleCreateLink = () => {
     if (!name.trim()) {
       toast.error('Please enter a link name');
       return;
     }
-    
+
     const amountNum = parseFloat(amount);
     if (isNaN(amountNum) || amountNum <= 0) {
       toast.error('Please enter a valid amount');
       return;
     }
 
-    const reference = generateReference();
-    const url = generateCheckoutUrl({
-      amount: amountNum,
-      currency,
-      chain,
-      reference,
-      description: description || undefined,
-      email: customerEmail || undefined,
-    });
-
-    const newLink: PaymentLink = {
-      id: crypto.randomUUID(),
+    createLink.mutate({
       name: name.trim(),
       amount: amountNum,
       currency,
       chain,
       description: description || undefined,
       customerEmail: customerEmail || undefined,
-      reference,
-      url,
-      createdAt: new Date(),
-    };
-
-    setLinks(prev => [newLink, ...prev]);
-    
-    // Reset form
-    setName('');
-    setAmount('');
-    setDescription('');
-    setCustomerEmail('');
-    
-    toast.success('Payment link created!');
+    }, {
+      onSuccess: () => {
+        // Reset form
+        setName('');
+        setAmount('');
+        setDescription('');
+        setCustomerEmail('');
+      }
+    });
   };
 
-  const copyToClipboard = async (link: PaymentLink) => {
+  const copyToClipboard = async (url: string, id: string) => {
     try {
-      await navigator.clipboard.writeText(link.url);
-      setCopiedId(link.id);
+      await navigator.clipboard.writeText(url);
+      setCopiedId(id);
       toast.success('Link copied to clipboard');
       setTimeout(() => setCopiedId(null), 2000);
     } catch {
@@ -123,10 +71,40 @@ const PaymentLinks = () => {
     }
   };
 
-  const deleteLink = (id: string) => {
-    setLinks(prev => prev.filter(l => l.id !== id));
-    toast.success('Payment link deleted');
+  const handleDeleteLink = (id: string) => {
+    if (confirm('Are you sure you want to delete this payment link?')) {
+      deleteLinkHook.mutate(id);
+    }
   };
+
+  if (isLoading) {
+    return (
+      <div className="space-y-6 animate-fade-in">
+        <div className="flex justify-between">
+          <div className="space-y-2">
+            <Skeleton className="h-8 w-48" />
+            <Skeleton className="h-4 w-64" />
+          </div>
+        </div>
+        <div className="grid gap-6 lg:grid-cols-2">
+          <Skeleton className="h-[400px] rounded-xl" />
+          <Skeleton className="h-[200px] rounded-xl" />
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px] text-center">
+        <AlertCircle className="w-12 h-12 text-destructive mb-4" />
+        <h3 className="text-lg font-semibold">Failed to load payment links</h3>
+        <p className="text-muted-foreground">Please try refreshing the page</p>
+      </div>
+    );
+  }
+
+  const safeLinks = links || [];
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -211,9 +189,18 @@ const PaymentLinks = () => {
               />
             </div>
 
-            <Button onClick={handleCreateLink} className="w-full gradient-primary">
-              <Link className="mr-2 h-4 w-4" />
-              Generate Payment Link
+            <Button onClick={handleCreateLink} className="w-full gradient-primary" disabled={createLink.isPending}>
+              {createLink.isPending ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Creating...
+                </>
+              ) : (
+                <>
+                  <Link className="mr-2 h-4 w-4" />
+                  Generate Payment Link
+                </>
+              )}
             </Button>
           </CardContent>
         </Card>
@@ -226,14 +213,14 @@ const PaymentLinks = () => {
               Your Payment Links
             </CardTitle>
             <CardDescription>
-              {links.length === 0 
-                ? 'No links created yet' 
-                : `${links.length} link${links.length === 1 ? '' : 's'} created`
+              {safeLinks.length === 0
+                ? 'No links created yet'
+                : `${safeLinks.length} link${safeLinks.length === 1 ? '' : 's'} created`
               }
             </CardDescription>
           </CardHeader>
           <CardContent>
-            {links.length === 0 ? (
+            {safeLinks.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">
                 <Link className="h-12 w-12 mx-auto mb-4 opacity-50" />
                 <p>Create your first payment link</p>
@@ -241,7 +228,7 @@ const PaymentLinks = () => {
               </div>
             ) : (
               <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2">
-                {links.map((link) => (
+                {safeLinks.map((link) => (
                   <div
                     key={link.id}
                     className="p-4 rounded-lg border border-border bg-muted/30 space-y-3"
@@ -253,29 +240,40 @@ const PaymentLinks = () => {
                           ₦{link.amount.toLocaleString()}
                         </p>
                         <p className="text-xs text-muted-foreground">
-                          {CHAIN_CONFIG[link.chain].name} • {link.reference}
+                          {link.reference ? (
+                            <>
+                              {link.chain ? CHAIN_CONFIG[link.chain as ChainType]?.name : 'Unknown Chain'} • {link.reference}
+                            </>
+                          ) : (
+                            'Reference pending'
+                          )}
                         </p>
                       </div>
                       <Button
                         variant="ghost"
                         size="icon"
                         className="text-destructive hover:text-destructive hover:bg-destructive/10 flex-shrink-0"
-                        onClick={() => deleteLink(link.id)}
+                        onClick={() => handleDeleteLink(link.id)}
+                        disabled={deleteLinkHook.isPending}
                       >
-                        <Trash2 className="h-4 w-4" />
+                        {deleteLinkHook.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
                       </Button>
                     </div>
 
                     <div className="flex items-center gap-2 p-2 rounded bg-background border border-border">
                       <code className="text-xs flex-1 truncate text-muted-foreground">
-                        {link.url}
+                        {/*window.location.origin + '/checkout?ref=' + link.slug /* Simple URL construction for now, backend provides full URL usually but let's use slug */}
+                        {/* Actually PaymentLink entity has `slug` but frontend uses full URL? */}
+                        {/* Let's assume link object has full url if backend provides it, otherwise construct it */}
+                        {/* The mock had `url`, my DTO has `url`. So let's rely on `link.url` if present, else construct */}
+                        {link.url || `${BACKEND_URL}/checkout?ref=${link.slug}`}
                       </code>
                       <div className="flex gap-1 flex-shrink-0">
                         <Button
                           variant="ghost"
                           size="icon"
                           className="h-8 w-8"
-                          onClick={() => copyToClipboard(link)}
+                          onClick={() => copyToClipboard(link.url || `${BACKEND_URL}/checkout?ref=${link.slug}`, link.id)}
                         >
                           {copiedId === link.id ? (
                             <Check className="h-4 w-4 text-success" />
@@ -283,7 +281,7 @@ const PaymentLinks = () => {
                             <Copy className="h-4 w-4" />
                           )}
                         </Button>
-                        
+
                         {/* QR Code Dialog */}
                         <Dialog>
                           <DialogTrigger asChild>
@@ -295,14 +293,14 @@ const PaymentLinks = () => {
                             <DialogHeader>
                               <DialogTitle className="text-center">{link.name}</DialogTitle>
                               <DialogDescription className="text-center sr-only">
-                                QR code for payment link {link.reference}
+                                QR code for payment link
                               </DialogDescription>
                             </DialogHeader>
                             <div className="flex flex-col items-center gap-4 py-4">
                               <div className="p-4 bg-white rounded-xl shadow-lg">
                                 <QRCodeSVG
                                   id={`qr-${link.id}`}
-                                  value={link.url}
+                                  value={link.url || `${BACKEND_URL}/checkout?ref=${link.slug}`}
                                   size={200}
                                   level="H"
                                   includeMargin
@@ -315,17 +313,14 @@ const PaymentLinks = () => {
                                   ₦{link.amount.toLocaleString()}
                                 </p>
                                 <p className="text-sm text-muted-foreground">
-                                  {CHAIN_CONFIG[link.chain].name}
-                                </p>
-                                <p className="text-xs text-muted-foreground mt-1">
-                                  Ref: {link.reference}
+                                  {link.chain ? CHAIN_CONFIG[link.chain as ChainType]?.name : 'Any Chain'}
                                 </p>
                               </div>
                               <div className="flex gap-2 w-full">
                                 <Button
                                   variant="outline"
                                   className="flex-1"
-                                  onClick={() => copyToClipboard(link)}
+                                  onClick={() => copyToClipboard(link.url || `${BACKEND_URL}/checkout?ref=${link.slug}`, link.id)}
                                 >
                                   {copiedId === link.id ? (
                                     <>
@@ -356,7 +351,7 @@ const PaymentLinks = () => {
                                         const pngUrl = canvas.toDataURL('image/png');
                                         const downloadLink = document.createElement('a');
                                         downloadLink.href = pngUrl;
-                                        downloadLink.download = `payment-qr-${link.reference}.png`;
+                                        downloadLink.download = `payment-qr-${link.slug}.png`;
                                         downloadLink.click();
                                       };
                                       img.src = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgData)));
@@ -378,7 +373,7 @@ const PaymentLinks = () => {
                           className="h-8 w-8"
                           asChild
                         >
-                          <a href={link.url} target="_blank" rel="noopener noreferrer">
+                          <a href={link.url || `${BACKEND_URL}/checkout?ref=${link.slug}`} target="_blank" rel="noopener noreferrer">
                             <ExternalLink className="h-4 w-4" />
                           </a>
                         </Button>

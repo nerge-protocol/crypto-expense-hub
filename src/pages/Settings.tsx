@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -13,23 +13,81 @@ import {
 } from '@/components/ui/select';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Building2, Globe, Bell, Key, Copy, Eye, EyeOff, RefreshCw, Save, ExternalLink } from 'lucide-react';
+import { Building2, Globe, Bell, Key, Copy, Eye, EyeOff, RefreshCw, Save, ExternalLink, Loader2, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
+import { useMerchantProfile, useUpdateProfile, useUpdateBankAccount, useApiKeys, useRegenerateApiKeys } from '@/hooks/useMerchant';
+import { Skeleton } from '@/components/ui/skeleton';
 
 export default function Settings() {
-  const { merchantData, secretKey } = useAuth();
+  const { data: profile, isLoading: isProfileLoading } = useMerchantProfile();
+  const { data: apiKeys, isLoading: isKeysLoading } = useApiKeys();
+  const updateProfile = useUpdateProfile();
+  const updateBankAccount = useUpdateBankAccount();
+  const regenerateKeys = useRegenerateApiKeys();
+
   const [showSecretKey, setShowSecretKey] = useState(false);
-  const [autoSettle, setAutoSettle] = useState(true);
-  const [settlementSchedule, setSettlementSchedule] = useState('instant');
+
+  // Local state for forms
+  const [businessForm, setBusinessForm] = useState({
+    businessName: '',
+    email: '',
+    businessWebsite: '',
+  });
+
+  const [bankForm, setBankForm] = useState({
+    accountNumber: '',
+    accountName: '',
+    bankCode: '',
+    bankName: '',
+  });
+
+  // Sync state when data loads
+  useEffect(() => {
+    if (profile) {
+      setBusinessForm({
+        businessName: profile.businessName || '',
+        email: profile.email || '',
+        businessWebsite: profile.businessWebsite || '',
+      });
+      if (profile.bankAccount) {
+        setBankForm({
+          accountNumber: profile.bankAccount.accountNumber || '',
+          accountName: profile.bankAccount.accountName || '',
+          bankCode: profile.bankAccount.bankCode || '058',
+          bankName: profile.bankAccount.bankName || '',
+        });
+      }
+    }
+  }, [profile]);
 
   const copyToClipboard = (text: string, label: string) => {
     navigator.clipboard.writeText(text);
     toast.success(`${label} copied to clipboard`);
   };
 
-  const handleSave = () => {
-    toast.success('Settings saved successfully');
+  const handleUpdateProfile = () => {
+    updateProfile.mutate(businessForm);
   };
+
+  const handleUpdateBank = () => {
+    updateBankAccount.mutate(bankForm);
+  };
+
+  const handleRegenerateKeys = () => {
+    if (confirm('Are you sure? This will invalidate your existing keys immediately.')) {
+      regenerateKeys.mutate({ testMode: profile?.testMode || false });
+    }
+  };
+
+  if (isProfileLoading || isKeysLoading) {
+    return (
+      <div className="space-y-6 animate-fade-in">
+        <Skeleton className="h-10 w-48" />
+        <Skeleton className="h-10 w-full" />
+        <Skeleton className="h-[400px] w-full rounded-xl" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -74,7 +132,8 @@ export default function Settings() {
                   <Label htmlFor="businessName">Business Name</Label>
                   <Input
                     id="businessName"
-                    defaultValue={merchantData?.businessName}
+                    value={businessForm.businessName}
+                    onChange={(e) => setBusinessForm({ ...businessForm, businessName: e.target.value })}
                     className="bg-muted/50"
                   />
                 </div>
@@ -83,7 +142,8 @@ export default function Settings() {
                   <Input
                     id="email"
                     type="email"
-                    defaultValue={merchantData?.email}
+                    value={businessForm.email}
+                    onChange={(e) => setBusinessForm({ ...businessForm, email: e.target.value })}
                     className="bg-muted/50"
                   />
                 </div>
@@ -92,14 +152,16 @@ export default function Settings() {
                   <Input
                     id="website"
                     placeholder="https://yourwebsite.com"
+                    value={businessForm.businessWebsite}
+                    onChange={(e) => setBusinessForm({ ...businessForm, businessWebsite: e.target.value })}
                     className="bg-muted/50"
                   />
                 </div>
               </div>
 
               <div className="pt-4 border-t border-border">
-                <Button onClick={handleSave} className="gradient-primary">
-                  <Save className="w-4 h-4 mr-2" />
+                <Button onClick={handleUpdateProfile} className="gradient-primary" disabled={updateProfile.isPending}>
+                  {updateProfile.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
                   Save Changes
                 </Button>
               </div>
@@ -115,7 +177,10 @@ export default function Settings() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-2">
                   <Label htmlFor="bankName">Bank Name</Label>
-                  <Select defaultValue="058">
+                  <Select
+                    value={bankForm.bankCode}
+                    onValueChange={(v) => setBankForm({ ...bankForm, bankCode: v, bankName: v === '058' ? 'GTBank' : 'Other Bank' })}
+                  >
                     <SelectTrigger className="bg-muted/50">
                       <SelectValue placeholder="Select bank" />
                     </SelectTrigger>
@@ -133,6 +198,8 @@ export default function Settings() {
                   <Input
                     id="accountNumber"
                     placeholder="0123456789"
+                    value={bankForm.accountNumber}
+                    onChange={(e) => setBankForm({ ...bankForm, accountNumber: e.target.value })}
                     className="bg-muted/50"
                   />
                 </div>
@@ -141,14 +208,16 @@ export default function Settings() {
                   <Input
                     id="accountName"
                     placeholder="Business Name Ltd"
+                    value={bankForm.accountName}
+                    onChange={(e) => setBankForm({ ...bankForm, accountName: e.target.value })}
                     className="bg-muted/50"
                   />
                 </div>
               </div>
 
               <div className="pt-4 border-t border-border">
-                <Button onClick={handleSave} className="gradient-primary">
-                  <Save className="w-4 h-4 mr-2" />
+                <Button onClick={handleUpdateBank} className="gradient-primary" disabled={updateBankAccount.isPending}>
+                  {updateBankAccount.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
                   Update Bank Account
                 </Button>
               </div>
@@ -169,7 +238,7 @@ export default function Settings() {
               <div className="p-4 rounded-lg bg-warning/10 border border-warning/20">
                 <p className="text-sm text-warning flex items-center gap-2">
                   <span className="font-semibold">Test Mode:</span>
-                  {merchantData?.testMode ? 'Active - No real payments will be processed' : 'Inactive - Live payments enabled'}
+                  {profile?.testMode ? 'Active - No real payments will be processed' : 'Inactive - Live payments enabled'}
                 </p>
               </div>
 
@@ -178,14 +247,14 @@ export default function Settings() {
                   <Label>Public Key</Label>
                   <div className="flex items-center gap-2">
                     <Input
-                      value="pk_test_xxxxxxxxxxxx"
+                      value={apiKeys?.publicKey || 'Loading...'}
                       readOnly
                       className="bg-muted/50 font-mono"
                     />
-                    <Button 
-                      variant="outline" 
+                    <Button
+                      variant="outline"
                       size="icon"
-                      onClick={() => copyToClipboard('pk_test_xxxxxxxxxxxx', 'Public key')}
+                      onClick={() => copyToClipboard(apiKeys?.publicKey || '', 'Public key')}
                     >
                       <Copy className="w-4 h-4" />
                     </Button>
@@ -200,21 +269,21 @@ export default function Settings() {
                   <div className="flex items-center gap-2">
                     <Input
                       type={showSecretKey ? 'text' : 'password'}
-                      value={secretKey || 'sk_test_xxxxxxxxxxxx'}
+                      value={apiKeys?.secretKey || 'Loading...'}
                       readOnly
                       className="bg-muted/50 font-mono"
                     />
-                    <Button 
-                      variant="outline" 
+                    <Button
+                      variant="outline"
                       size="icon"
                       onClick={() => setShowSecretKey(!showSecretKey)}
                     >
                       {showSecretKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                     </Button>
-                    <Button 
-                      variant="outline" 
+                    <Button
+                      variant="outline"
                       size="icon"
-                      onClick={() => copyToClipboard(secretKey || 'sk_test_xxxxxxxxxxxx', 'Secret key')}
+                      onClick={() => copyToClipboard(apiKeys?.secretKey || '', 'Secret key')}
                     >
                       <Copy className="w-4 h-4" />
                     </Button>
@@ -226,8 +295,8 @@ export default function Settings() {
               </div>
 
               <div className="pt-4 border-t border-border">
-                <Button variant="destructive" className="gap-2">
-                  <RefreshCw className="w-4 h-4" />
+                <Button variant="destructive" className="gap-2" onClick={handleRegenerateKeys} disabled={regenerateKeys.isPending}>
+                  {regenerateKeys.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
                   Regenerate Keys
                 </Button>
               </div>
@@ -235,7 +304,7 @@ export default function Settings() {
           </Card>
         </TabsContent>
 
-        {/* Webhooks */}
+        {/* Webhooks (Placeholder) */}
         <TabsContent value="webhooks" className="space-y-6">
           <Card className="border-border bg-card">
             <CardHeader>
@@ -245,60 +314,14 @@ export default function Settings() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-              <div className="space-y-2">
-                <Label htmlFor="webhookUrl">Webhook URL</Label>
-                <Input
-                  id="webhookUrl"
-                  placeholder="https://yourserver.com/webhook"
-                  className="bg-muted/50"
-                />
-                <p className="text-xs text-muted-foreground">
-                  We'll send POST requests to this URL for payment events
-                </p>
-              </div>
-
-              <div className="space-y-4">
-                <Label>Events</Label>
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between p-3 rounded-lg bg-muted/30 border border-border">
-                    <div>
-                      <p className="font-medium">payment.success</p>
-                      <p className="text-sm text-muted-foreground">When a payment is completed</p>
-                    </div>
-                    <Switch defaultChecked />
-                  </div>
-                  <div className="flex items-center justify-between p-3 rounded-lg bg-muted/30 border border-border">
-                    <div>
-                      <p className="font-medium">payment.failed</p>
-                      <p className="text-sm text-muted-foreground">When a payment fails</p>
-                    </div>
-                    <Switch defaultChecked />
-                  </div>
-                  <div className="flex items-center justify-between p-3 rounded-lg bg-muted/30 border border-border">
-                    <div>
-                      <p className="font-medium">settlement.completed</p>
-                      <p className="text-sm text-muted-foreground">When funds are sent to your bank</p>
-                    </div>
-                    <Switch />
-                  </div>
-                </div>
-              </div>
-
-              <div className="pt-4 border-t border-border flex gap-3">
-                <Button onClick={handleSave} className="gradient-primary">
-                  <Save className="w-4 h-4 mr-2" />
-                  Save Webhook Settings
-                </Button>
-                <Button variant="outline">
-                  <ExternalLink className="w-4 h-4 mr-2" />
-                  View Webhook Logs
-                </Button>
+              <div className="p-4 bg-muted rounded-lg text-center">
+                <p className="text-muted-foreground">Webhook configuration will be available soon.</p>
               </div>
             </CardContent>
           </Card>
         </TabsContent>
 
-        {/* Settlements */}
+        {/* Settlements (Placeholder) */}
         <TabsContent value="settlements" className="space-y-6">
           <Card className="border-border bg-card">
             <CardHeader>
@@ -308,45 +331,8 @@ export default function Settings() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-              <div className="flex items-center justify-between p-4 rounded-lg bg-muted/30 border border-border">
-                <div>
-                  <p className="font-medium">Auto-Settlement</p>
-                  <p className="text-sm text-muted-foreground">
-                    Automatically send funds to your bank account
-                  </p>
-                </div>
-                <Switch checked={autoSettle} onCheckedChange={setAutoSettle} />
-              </div>
-
-              <div className="space-y-2">
-                <Label>Settlement Schedule</Label>
-                <Select value={settlementSchedule} onValueChange={setSettlementSchedule}>
-                  <SelectTrigger className="bg-muted/50">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="instant">Instant (after each payment)</SelectItem>
-                    <SelectItem value="daily">Daily (once per day)</SelectItem>
-                    <SelectItem value="weekly">Weekly (every Sunday)</SelectItem>
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">
-                  When auto-settlement is enabled, funds will be transferred based on this schedule
-                </p>
-              </div>
-
-              <div className="p-4 rounded-lg bg-primary/10 border border-primary/20">
-                <p className="text-sm">
-                  <span className="font-semibold text-primary">Platform Fee:</span>{' '}
-                  1.5% of each payment amount is deducted before settlement
-                </p>
-              </div>
-
-              <div className="pt-4 border-t border-border">
-                <Button onClick={handleSave} className="gradient-primary">
-                  <Save className="w-4 h-4 mr-2" />
-                  Save Settlement Settings
-                </Button>
+              <div className="p-4 bg-muted rounded-lg text-center">
+                <p className="text-muted-foreground">Settlement preferences will be available soon.</p>
               </div>
             </CardContent>
           </Card>

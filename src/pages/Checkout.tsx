@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Wallet, Copy, Check, AlertCircle, Loader2, ExternalLink, X, CheckCircle2 } from 'lucide-react';
+import { useMerchantPayments, useExchangeRate } from '@/hooks/useMerchant';
 import { useWallet, WalletType, SupportedChain, ChainType } from '@/hooks/useWallet';
 import { useTokenTransfer } from '@/hooks/useTokenTransfer';
 import {
@@ -14,6 +15,7 @@ import {
 import { toast } from 'sonner';
 import { getContractByName } from '@/lib/contracts';
 import { useEscrow } from '@/hooks/useEscrow';
+import { API_URL } from '@/lib/api';
 
 interface PaymentData {
   merchantName: string;
@@ -43,7 +45,7 @@ interface Chain {
 
 type Step = 'initial' | 'wallet-connect' | 'payment' | 'processing' | 'success' | 'failed';
 
-let BACKEND_URL = 'http://localhost:4000';
+let BACKEND_URL = API_URL;
 
 const Checkout = () => {
   const [searchParams] = useSearchParams();
@@ -52,6 +54,7 @@ const Checkout = () => {
 
   // Parse URL parameters
   const paymentId = searchParams.get('paymentId');
+  const slug = searchParams.get('ref');
   const urlAmount = searchParams.get('amount');
   const urlCurrency = searchParams.get('currency');
   const urlChain = searchParams.get('chain') as SupportedChain | null;
@@ -61,7 +64,7 @@ const Checkout = () => {
   const urlToken = searchParams.get('token') as TokenSymbol | null;
 
   const [isOpen, setIsOpen] = useState(false);
-  const [selectedToken, setSelectedToken] = useState<TokenSymbol>(urlToken || 'USDC');
+  const [selectedToken, setSelectedToken] = useState<TokenSymbol>(urlToken || 'USDT'); // TODO: fetch default token via app-config from backend
 
   // Payment Data State
   const [paymentData, setPaymentData] = useState<PaymentData | null>(null);
@@ -110,8 +113,47 @@ const Checkout = () => {
       }
     };
 
+    const fetchPaymentLinkBySlug = async () => {
+      if (!slug) return;
+
+      setLoadingPayment(true);
+      setPaymentError(null);
+
+      try {
+        const response = await fetch(`${BACKEND_URL}/checkout/payment-link/${slug}`);
+        if (!response.ok) {
+          throw new Error('Failed to load payment details');
+        }
+
+        const data = await response.json();
+        console.log("DATA>>>>>>>>>", data);
+        setFetchedPaymentData(data);
+
+        setPaymentData({
+          merchantName: data.merchant.name,
+          merchantLogo: data.merchant.logo || "https://via.placeholder.com/100x100/4F46E5/FFFFFF?text=TS",
+          amount: data.amount,
+          currency: data.currency,
+          reference: `${"PLNK-" + slug + "-" + Date.now()}`,
+          email: data.email,
+          description: data.description,
+          publicKey: "pk_test_placeholder", // Backend should probably return this too if needed
+          callbackUrl: data.callbackUrl || "https://merchant.com/verify",
+          metadata: data.metadata || {}
+        });
+
+      } catch (err: any) {
+        console.error('Error fetching payment:', err);
+        setPaymentError(err.message || 'Could not load payment details');
+      } finally {
+        setLoadingPayment(false);
+      }
+    };
+
     if (paymentId) {
       fetchPaymentDetails();
+    } else if (slug) {
+      fetchPaymentLinkBySlug();
     } else {
       // Fallback to URL params if paymentId is missing
       if (urlAmount && urlCurrency) {
@@ -167,7 +209,11 @@ const Checkout = () => {
   const [copied, setCopied] = useState(false);
   const [timeLeft, setTimeLeft] = useState(600);
 
-  const usdtRate = 1420;
+  // const [timeLeft, setTimeLeft] = useState(600);
+
+  const { data: exchangeRateData, isLoading: isLoadingRate } = useExchangeRate(selectedToken, 'NGN'); // TODO: Use currency from paymentData
+  const usdtRate = exchangeRateData?.effectiveRate || 1420; // Fallback to safe default or previous hardcoded value while loading
+
   // Calculate derived values only when paymentData is available
   const cryptoAmount = paymentData ? (paymentData.amount / usdtRate).toFixed(2) : '0.00';
   const platformFee = paymentData ? (parseFloat(cryptoAmount) * 0.015).toFixed(2) : '0.00';
@@ -178,7 +224,7 @@ const Checkout = () => {
     if (selectedChain) {
       const availableTokens = selectedChain.tokens;
       if (!availableTokens.includes(selectedToken)) {
-        setSelectedToken(availableTokens[0] || 'USDC');
+        setSelectedToken(availableTokens[0] || 'USDT'); // TODO: this would come from app-config from backend
       }
     }
   }, [selectedChain, selectedToken]);
@@ -225,20 +271,36 @@ const Checkout = () => {
         }
       } else {
         // 1. Call backend to initiate payment
-        const response = await fetch(`${BACKEND_URL}/api/payments/initiate-payment-intent`, {
+        const response = await fetch(`${BACKEND_URL}/checkout/payment/initialize-by-slug/${slug}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            amount: parseFloat(params.amount) * 1420, // NGN amount
-            token: 'USDT',
-            chain: 'arbitrum'
+            reference: paymentData.reference,
+            callbackUrl: 'https://merchant.com/verify',
+            metadata: {
+              orderId: 'ORD-12345',
+              customerName: 'John Doe'
+            }
           })
         });
 
+        if (!response.ok) {
+          throw new Error('Failed to initiate payment');
+        }
+
         const data = await response.json();
         console.log("DATA>>>>>>>>>", data);
-        pId = data.data.id;
-        pData = data.data;
+
+        if (!data.payment.id) {
+          throw new Error('Payment ID not found');
+        }
+
+        if (!data.payment.onchainReference) {
+          throw new Error('Payment onchain reference not found');
+        }
+
+        pId = data.payment.id;
+        pData = data;
       }
 
       // const response = await fetch('/api/payments/initiate-payment-intent', {
@@ -254,9 +316,9 @@ const Checkout = () => {
       // const paymentData = await response.json();
 
       // 2. Create escrow on-chain
-      const arbitrum = getContractByName(params.chain); // 'arbitrum'
+      // const arbitrum = getContractByName(params.chain); // e.g 'arbitrum'
       const result = await createEscrow(
-        arbitrum.usdt,
+        selectedToken,
         params.amount, // Crypto amount
         pData.payment.onchainReference, // Payment ID from backend
         params.category
@@ -271,6 +333,7 @@ const Checkout = () => {
         body: JSON.stringify({
           escrowId: result.escrowId,
           chain: params.chain,
+          token: selectedToken,
           cryptoAmount: params.amount,
           txHash: result.txHash
         })
@@ -313,7 +376,7 @@ const Checkout = () => {
       const result = await submitPayment({
         amount: totalCrypto,
         chain: selectedChain.id,
-        category: 'payment'
+        category: 'payment',
       });
 
       if (!result.txHash) {
@@ -663,6 +726,10 @@ const Checkout = () => {
               </div>
 
               <div className="space-y-2 bg-muted rounded-xl p-4 border border-border">
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Exchange Rate</span>
+                  <span className="font-medium text-foreground">1 {selectedToken} = ₦{usdtRate.toLocaleString()}</span>
+                </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Amount</span>
                   <span className="font-medium text-foreground">{cryptoAmount} {selectedToken}</span>
