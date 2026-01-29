@@ -3,8 +3,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { StatsCard } from '@/components/StatsCard';
 import { PaymentTable } from '@/components/PaymentTable';
 import { RevenueChart } from '@/components/RevenueChart';
-import { mockPayments } from '@/lib/mock-data';
-import { useMerchantAnalytics } from '@/hooks/useMerchant';
+import { useMerchantAnalytics, useMerchantPayments } from '@/hooks/useMerchant';
 import { DollarSign, ArrowUpRight, TrendingUp, Clock, AlertCircle } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 
@@ -22,10 +21,12 @@ export default function Dashboard() {
   const { merchantData } = useAuth();
   const navigate = useNavigate();
 
-  const { data: analytics, isLoading, error } = useMerchantAnalytics();
+  const { data: analytics, isLoading: analyticsLoading, error: analyticsError } = useMerchantAnalytics();
+  const { data: paymentsData, isLoading: paymentsLoading } = useMerchantPayments({ limit: 8 });
 
-  // TODO: Replace recentPayments with real data query once available or use separate hook
-  const recentPayments = mockPayments.slice(0, 8);
+  const recentPayments = paymentsData?.payments || [];
+  const isLoading = analyticsLoading || paymentsLoading;
+  const error = analyticsError;
 
   if (isLoading) {
     return (
