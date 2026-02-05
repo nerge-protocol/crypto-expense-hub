@@ -23,9 +23,16 @@ const USDC_ADDRESS = '0x1Bd26C065Ea2980323b1cD99e9C43Ab98851f51F' as const;
 const USDC_ADDRESS_BASE = '0x936FC3bb38AD2343E532cC4D57A8f36220ab3691' as const;
 const USDT_ADDRESS_BASE = '0x656bCAB335B667E1EA81c755A2C2736688628d24' as const;
 
+export const USDT_ADDRESS_TRON = 'TCZwWvyc9gMBJb9eKfy2Tk1J54c2zsHFqs' as const;
+export const USDC_ADDRESS_TRON = 'TBRaHMt26uEw7Bf31EkNCyfjnjRSZHzGgN' as const;
+
 export function getUSDTContractAddress(chainId: number) {
     if (chainId === 421614) {
         return USDT_ADDRESS;
+    } else if (chainId === 84532) {
+        return USDT_ADDRESS_BASE;
+    } else if (chainId === 123) {
+        return USDT_ADDRESS_TRON;
     } else {
         return USDT_ADDRESS;
     }
@@ -34,6 +41,10 @@ export function getUSDTContractAddress(chainId: number) {
 export function getUSDCContractAddress(chainId: number) {
     if (chainId === 421614) {
         return USDC_ADDRESS;
+    } else if (chainId === 84532) {
+        return USDC_ADDRESS_BASE;
+    } else if (chainId === 123) {
+        return USDC_ADDRESS_TRON;
     } else {
         return USDC_ADDRESS;
     }
@@ -166,26 +177,26 @@ export function getContractByName(name: 'ethereum' | 'arbitrum' | 'base' | 'tron
         case 'tron':
             if (TESTNET && name === 'tron') {
                 return {
-                    chainId: 84531,
+                    chainId: 2494104990,
                     chainName: 'Tron',
-                    rpcUrl: 'https://base-sepolia.g.alchemy.com/v2/your-api-key',
-                    escrowManager: '0xF09DaDf498C01af003Ed6592039932163f124DDf', // Your deployed address
-                    expenseVerifier: '0x41385204bab6F049CA8D34C088e7f98EA1F6A77B',
-                    usdt: '0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9',
-                    usdc: '0xaf88d065e77c8cC2239327C5EDb3A432268e5831',
-                    blockExplorer: 'https://basescan.org',
+                    rpcUrl: 'https://nile.trongrid.io',
+                    escrowManager: 'TWKLegNH41NRzPJ3wH7StZd3XXMK7XHVAr', // '0xF09DaDf498C01af003Ed6592039932163f124DDf', // Your deployed address
+                    expenseVerifier: 'TGwF3UGReLfuPzfoKrqHMKgcuGksVY9gZC', // '0x41385204bab6F049CA8D34C088e7f98EA1F6A77B',
+                    usdt: USDT_ADDRESS_TRON,
+                    usdc: USDC_ADDRESS_TRON,
+                    blockExplorer: 'https://nile.tronscan.org',
                     symbol: 'ETH',
                 }
             } else {
                 return {
-                    chainId: 8453,
+                    chainId: 728126428,
                     chainName: 'Tron',
-                    rpcUrl: 'https://base.g.alchemy.com/v2/your-api-key',
+                    rpcUrl: 'https://api.trongrid.io',
                     escrowManager: '0xF09DaDf498C01af003Ed6592039932163f124DDf', // Your deployed address
                     expenseVerifier: '0x41385204bab6F049CA8D34C088e7f98EA1F6A77B',
-                    usdt: '0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9',
-                    usdc: '0xaf88d065e77c8cC2239327C5EDb3A432268e5831',
-                    blockExplorer: 'https://basescan.org',
+                    usdt: USDT_ADDRESS_TRON,
+                    usdc: USDC_ADDRESS_TRON,
+                    blockExplorer: 'https://tronscan.org',
                     symbol: 'ETH',
                 }
             }
@@ -196,9 +207,9 @@ export function getContractByName(name: 'ethereum' | 'arbitrum' | 'base' | 'tron
                 rpcUrl: 'https://base.g.alchemy.com/v2/your-api-key',
                 escrowManager: '0xF09DaDf498C01af003Ed6592039932163f124DDf', // Your deployed address
                 expenseVerifier: '0x41385204bab6F049CA8D34C088e7f98EA1F6A77B',
-                usdt: '0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9',
-                usdc: '0xaf88d065e77c8cC2239327C5EDb3A432268e5831',
-                blockExplorer: 'https://basescan.org',
+                usdt: USDT_ADDRESS_TRON,
+                usdc: USDC_ADDRESS_TRON,
+                blockExplorer: 'https://nile.tronscan.org',
                 symbol: 'ETH',
             }
     }
