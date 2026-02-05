@@ -20,6 +20,9 @@ export const ABIS = {
 const USDT_ADDRESS = '0x936FC3bb38AD2343E532cC4D57A8f36220ab3691' as const;
 const USDC_ADDRESS = '0x1Bd26C065Ea2980323b1cD99e9C43Ab98851f51F' as const;
 
+const USDC_ADDRESS_BASE = '0x936FC3bb38AD2343E532cC4D57A8f36220ab3691' as const;
+const USDT_ADDRESS_BASE = '0x656bCAB335B667E1EA81c755A2C2736688628d24' as const;
+
 export function getUSDTContractAddress(chainId: number) {
     if (chainId === 421614) {
         return USDT_ADDRESS;
@@ -37,7 +40,7 @@ export function getUSDCContractAddress(chainId: number) {
 }
 
 
-export function getContractByName(name: 'ethereum' | 'arbitrum' | 'base' | 'tron' | 'solana') {
+export function getContractByNameOld(name: 'ethereum' | 'arbitrum' | 'base' | 'tron' | 'solana') {
     switch (name) {
         case 'arbitrum':
             if (TESTNET && name === 'arbitrum') {
@@ -104,7 +107,7 @@ export function getContractByName(name: 'ethereum' | 'arbitrum' | 'base' | 'tron
     }
 }
 
-export function getContractByName2(name: 'arbitrum' | 'base' | 'tron' | 'solana') {
+export function getContractByName(name: 'ethereum' | 'arbitrum' | 'base' | 'tron' | 'solana') {
     switch (name) {
         case 'arbitrum':
             if (TESTNET && name === 'arbitrum') {
@@ -137,13 +140,13 @@ export function getContractByName2(name: 'arbitrum' | 'base' | 'tron' | 'solana'
         case 'base':
             if (TESTNET && name === 'base') {
                 return {
-                    chainId: 84531,
+                    chainId: 84532,
                     chainName: 'Base Sepolia',
-                    rpcUrl: 'https://base-sepolia.g.alchemy.com/v2/your-api-key',
-                    escrowManager: '0xF09DaDf498C01af003Ed6592039932163f124DDf', // Your deployed address
-                    expenseVerifier: '0x41385204bab6F049CA8D34C088e7f98EA1F6A77B',
-                    usdt: '0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9',
-                    usdc: '0xaf88d065e77c8cC2239327C5EDb3A432268e5831',
+                    rpcUrl: 'https://sepolia.base.org',
+                    escrowManager: '0xf09dadf498c01af003ed6592039932163f124ddf', // Your deployed address
+                    expenseVerifier: '0x41385204bab6f049ca8d34c088e7f98ea1f6a77b',
+                    usdt: USDT_ADDRESS_BASE,
+                    usdc: USDC_ADDRESS_BASE,
                     blockExplorer: 'https://basescan.org',
                     symbol: 'ETH',
                 }
@@ -154,8 +157,8 @@ export function getContractByName2(name: 'arbitrum' | 'base' | 'tron' | 'solana'
                     rpcUrl: 'https://base.g.alchemy.com/v2/your-api-key',
                     escrowManager: '0xF09DaDf498C01af003Ed6592039932163f124DDf', // Your deployed address
                     expenseVerifier: '0x41385204bab6F049CA8D34C088e7f98EA1F6A77B',
-                    usdt: '0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9',
-                    usdc: '0xaf88d065e77c8cC2239327C5EDb3A432268e5831',
+                    usdt: USDT_ADDRESS_BASE,
+                    usdc: USDC_ADDRESS_BASE,
                     blockExplorer: 'https://basescan.org',
                     symbol: 'ETH',
                 }
@@ -185,6 +188,18 @@ export function getContractByName2(name: 'arbitrum' | 'base' | 'tron' | 'solana'
                     blockExplorer: 'https://basescan.org',
                     symbol: 'ETH',
                 }
+            }
+        default:
+            return {
+                chainId: 8453,
+                chainName: 'Tron',
+                rpcUrl: 'https://base.g.alchemy.com/v2/your-api-key',
+                escrowManager: '0xF09DaDf498C01af003Ed6592039932163f124DDf', // Your deployed address
+                expenseVerifier: '0x41385204bab6F049CA8D34C088e7f98EA1F6A77B',
+                usdt: '0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9',
+                usdc: '0xaf88d065e77c8cC2239327C5EDb3A432268e5831',
+                blockExplorer: 'https://basescan.org',
+                symbol: 'ETH',
             }
     }
 }

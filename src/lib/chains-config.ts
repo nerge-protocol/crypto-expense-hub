@@ -113,7 +113,13 @@ export const CHAIN_CONFIGS: Record<SupportedChain, ChainConfig> = {
         symbol: 'USDC',
         decimals: 6,
         mainnet: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
-        testnet: '0x036CbD53842c5426634e7929541eC2318f3dCF7e', // Base Sepolia USDC
+        testnet: '0x936FC3bb38AD2343E532cC4D57A8f36220ab3691', // Base Sepolia USDC
+      },
+      {
+        symbol: 'USDT',
+        decimals: 6,
+        mainnet: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
+        testnet: '0x656bCAB335B667E1EA81c755A2C2736688628d24', // Base Sepolia USDT
       },
     ],
     fee: 'Very Low (~$0.01)',
@@ -265,7 +271,7 @@ export function getCurrentBlockExplorer(chain: SupportedChain): string {
 export function getTokenAddress(chain: SupportedChain, token: TokenSymbol): string | undefined {
   const chainConfig = CHAIN_CONFIGS[chain];
   if (!chainConfig) return undefined;
-  
+
   const tokenConfig = chainConfig.tokens.find(t => t.symbol === token);
   return tokenConfig?.[NETWORK_ENV];
 }
@@ -274,7 +280,7 @@ export function getTokenAddress(chain: SupportedChain, token: TokenSymbol): stri
 export function getTokenDecimals(chain: SupportedChain, token: TokenSymbol): number {
   const chainConfig = CHAIN_CONFIGS[chain];
   if (!chainConfig) return 6;
-  
+
   const tokenConfig = chainConfig.tokens.find(t => t.symbol === token);
   return tokenConfig?.decimals ?? 6;
 }
@@ -283,7 +289,7 @@ export function getTokenDecimals(chain: SupportedChain, token: TokenSymbol): num
 export function getAvailableTokens(chain: SupportedChain): TokenSymbol[] {
   const chainConfig = CHAIN_CONFIGS[chain];
   if (!chainConfig) return [];
-  
+
   return chainConfig.tokens
     .filter(t => t[NETWORK_ENV] && t[NETWORK_ENV] !== '0x0000000000000000000000000000000000000000')
     .map(t => t.symbol);
@@ -293,12 +299,12 @@ export function getAvailableTokens(chain: SupportedChain): TokenSymbol[] {
 export function getExplorerTxUrl(chain: SupportedChain, txHash: string): string {
   const explorer = getCurrentBlockExplorer(chain);
   if (!explorer) return '#';
-  
+
   switch (chain) {
     case 'tron':
       return `${explorer}/#/transaction/${txHash}`;
     case 'solana':
-      return NETWORK_ENV === 'testnet' 
+      return NETWORK_ENV === 'testnet'
         ? `${explorer}/tx/${txHash}?cluster=devnet`
         : `${explorer}/tx/${txHash}`;
     default:
@@ -333,7 +339,7 @@ export function getWalletsForChain(chain: SupportedChain): WalletConfig[] {
     { type: 'metamask', name: 'MetaMask', icon: '🦊', color: 'bg-orange-500', description: 'Browser extension' },
     { type: 'trustwallet', name: 'Trust Wallet', icon: '🛡️', color: 'bg-blue-500', description: 'Mobile wallet' },
   ];
-  
+
   switch (chain) {
     case 'ethereum':
     case 'base':
