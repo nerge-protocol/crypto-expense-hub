@@ -5,26 +5,27 @@
 import { useMemo } from 'react';
 import { ethers } from 'ethers';
 import { useWalletClient, usePublicClient } from 'wagmi';
-import { CONTRACTS, ABIS } from '../lib/contracts';
+import { CONTRACTS, ABIS, getContractByName } from '../lib/contracts';
 
-export function useContract(contractName: 'escrowManager' | 'expenseVerifier', chainId?: number) {
+export function useContract(contractName: 'escrowManager' | 'expenseVerifier', chain: 'ethereum' | 'arbitrum' | 'base' | 'tron' | 'solana' = 'base') {
     const { data: walletClient } = useWalletClient();
     const publicClient = usePublicClient();
 
     return useMemo(() => {
-        const chain = chainId === 42161 ? 'arbitrum' : 'arbitrumSepolia';
-        const address = CONTRACTS[chain][contractName];
+        // const chain = chainId === 42161 ? 'arbitrum' : 'arbitrumSepolia';
+        const contractInfo = getContractByName(chain);
+        const address = contractInfo[contractName]; // CONTRACTS[chain][contractName];
         const abi = ABIS[contractName];
 
         if (!address) {
-            throw new Error(`Contract ${contractName} not found for chain ${chainId}`);
+            throw new Error(`Contract ${contractName} not found for chain ${chain}`);
         }
 
         // Read-only contract (for queries)
         const readContract = new ethers.Contract(
             address,
             abi,
-            new ethers.JsonRpcProvider(CONTRACTS[chain].rpcUrl)
+            new ethers.JsonRpcProvider(contractInfo.rpcUrl)
         );
 
         // Write contract (for transactions) - needs signer
@@ -45,5 +46,5 @@ export function useContract(contractName: 'escrowManager' | 'expenseVerifier', c
             writeContractFunc,
             abi
         };
-    }, [contractName, chainId, walletClient]);
+    }, [contractName, chain, walletClient]);
 }

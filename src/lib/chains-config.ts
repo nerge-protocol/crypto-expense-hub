@@ -3,6 +3,8 @@
  * Toggle between testnet and mainnet easily, and add/remove chains as needed.
  */
 
+import { USDT_ADDRESS_TRON } from "./contracts";
+
 // Environment toggle - switch this to 'mainnet' for production
 export const NETWORK_ENV: 'testnet' | 'mainnet' = 'testnet';
 
@@ -193,7 +195,8 @@ export const CHAIN_CONFIGS: Record<SupportedChain, ChainConfig> = {
         symbol: 'USDT',
         decimals: 6,
         mainnet: 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t',
-        testnet: 'TXLAQ63Xg1NAzckPwKHvzw7CSEmLMEqcdj', // Nile USDT
+        // testnet: 'TXLAQ63Xg1NAzckPwKHvzw7CSEmLMEqcdj', // Nile USDT
+        testnet: USDT_ADDRESS_TRON
       },
     ],
     fee: 'Low (~$1-2)',

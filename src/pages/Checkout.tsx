@@ -76,6 +76,8 @@ const Checkout = () => {
 
   // Fetch payment details if paymentId is present
   useEffect(() => {
+    // if (!isOpen) return;
+
     const fetchPaymentDetails = async () => {
       if (!paymentId) return;
 
@@ -323,7 +325,8 @@ const Checkout = () => {
         contractByChain[selectedToken.toLowerCase()],
         params.amount, // Crypto amount
         pData.payment.onchainReference, // Payment ID from backend
-        params.category
+        params.category,
+        params.chain
       );
       console.log("RESULT>>>>>>>>>", result);
 
@@ -420,7 +423,7 @@ const Checkout = () => {
     return (
       <div className="min-h-screen bg-gradient-to-br from-background via-secondary/10 to-background flex items-center justify-center p-4">
         <div className="text-center">
-          <h1 className="text-4xl font-bold text-foreground mb-4">Synledger Crypto Payment Widget</h1>
+          <h1 className="text-4xl font-bold text-foreground mb-4">iSpend Payment Widget</h1>
           <p className="text-muted-foreground mb-8">Checkout experience for crypto payments</p>
 
           <button

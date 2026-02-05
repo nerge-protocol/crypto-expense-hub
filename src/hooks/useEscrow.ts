@@ -5,7 +5,13 @@
 import { useState } from 'react';
 import { ethers } from 'ethers';
 import { useContract } from './useContract';
-import { CONTRACTS, ABIS } from '../lib/contracts';
+import { CONTRACTS, ABIS, getContractByName } from '../lib/contracts';
+
+declare global {
+    interface Window {
+        tronWeb: any;
+    }
+}
 
 export function useEscrow() {
     const [loading, setLoading] = useState(false);
@@ -20,17 +26,116 @@ export function useEscrow() {
         token: string,
         amount: string, // In token decimals (e.g., "35.21" for USDT)
         paymentId: string, // From backend
-        category: string
+        category: string,
+        chain: 'ethereum' | 'arbitrum' | 'base' | 'tron' | 'solana' = 'base' // Default to base
     ) => {
-        const escrow = await writeContractFunc();
-        if (!escrow) throw new Error('Wallet not connected');
-
         setLoading(true);
         setError(null);
 
         try {
+            // ============================================
+            // TRON IMPLEMENTATION
+            // ============================================
+            if (chain === 'tron') {
+                if (!window.tronWeb || !window.tronWeb.ready) {
+                    throw new Error('TronLink not installed or not ready');
+                }
+
+                const tronContractConfig = getContractByName('tron');
+                const escrowAddress = tronContractConfig.escrowManager;
+
+                // 1. Convert amount (USDT/USDC on Tron use 6 decimals usually)
+                // Note: TronWeb handles big numbers, but we pass integer string
+                const amountMul = parseFloat(amount) * 1_000_000;
+                const amountInt = Math.floor(amountMul).toString();
+
+                // 2. Approve Token
+                const tokenContract = await window.tronWeb.contract().at(token);
+                console.log(`Approving ${amountInt} for ${escrowAddress} on Tron...`);
+                await tokenContract.approve(escrowAddress, amountInt).send();
+                console.log('Approval sent');
+
+                // 3. Create Escrow
+                const abi = ABIS['escrowManager'];
+                const escrowContract = await window.tronWeb.contract(abi, escrowAddress) //.at(escrowAddress);
+
+                // Convert paymentId to bytes32 hex string for Tron
+                // ethers.encodeBytes32String returns 0x..., Tron might want just hex or 0x is fine
+                const paymentIdBytes = ethers.encodeBytes32String(paymentId);
+
+                console.log('Creating escrow on Tron...', {
+                    token,
+                    amount: amountInt,
+                    paymentId: paymentIdBytes,
+                    category
+                });
+
+                const txId = await escrowContract.createEscrow(
+                    token,
+                    amountInt,
+                    paymentIdBytes,
+                    category
+                ).send();
+
+                console.log('Transaction sent:', txId);
+
+                // Wait for confirmation logic could be added here (polling getTransactionInfo)
+                // For now we return the txId
+
+                // Poll for result
+                let receipt = null;
+                let retries = 0;
+                let escrowId = null;
+
+                while (!receipt && retries < 20) {
+                    await new Promise(resolve => setTimeout(resolve, 3000));
+                    receipt = await window.tronWeb.trx.getTransactionInfo(txId);
+                    if (receipt && Object.keys(receipt).length === 0) receipt = null; // empty object means not found yet
+                    retries++;
+                }
+
+                if (!receipt) {
+                    console.warn('Transaction confirmation timed out, but likely successful');
+                } else {
+                    console.log('Transaction confirmed:', receipt);
+
+                    const events = await window.tronWeb.getEventByTransactionID(txId);
+                    console.log('Events:', events);
+
+                    // Extract escrowId from event logs
+                    // parse escrowId from logs if possible, else return null (backend indexer will catch it)
+                    // Tron logs are in receipt.log
+                    // Parsing tron logs is complex without ABI decoder, but we index on backend
+                    const escrowCreatedEvent = events.data.find(
+                        (log: any) => log.event_name === 'EscrowCreated'
+                    );
+
+                    escrowId = escrowCreatedEvent?.result?.escrowId; // First argument is escrowId
+                }
+
+                if (receipt.receipt.result === 'REVERT' || receipt.result === 'FAILED') {
+                    throw new Error('Transaction failed');
+                }
+
+                setLoading(false);
+                return {
+                    success: true,
+                    txHash: txId,
+                    escrowId: escrowId,
+                    receipt
+                };
+            }
+
+            // ============================================
+            // EVM IMPLEMENTATION (Arbitrum, Base, etc.)
+            // ============================================
+
+            const escrow = await writeContractFunc();
+            if (!escrow) throw new Error('Wallet not connected');
+
             // Convert amount to wei (18 decimals for USDT/USDC)
-            const amountWei = ethers.parseUnits(amount, 6); // USDT/USDC use 6 decimals
+            // Wait, USDT/USDC usually have 6 decimals on EVM too
+            const amountWei = ethers.parseUnits(amount, 6);
 
             // Convert paymentId to bytes32
             const paymentIdBytes = ethers.encodeBytes32String(paymentId);
