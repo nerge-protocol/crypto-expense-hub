@@ -29,10 +29,26 @@ export function useContract(contractName: 'escrowManager' | 'expenseVerifier', c
         );
 
         // Write contract (for transactions) - needs signer
-        let writeContractFunc: Function;
-        if (walletClient || (typeof window !== 'undefined' && window.ethereum)) {
-            const provider = new ethers.BrowserProvider(window.ethereum);
+        let writeContractFunc: Function = () => { throw new Error("Wallet not connected"); };
 
+        if (walletClient) {
+            writeContractFunc = async function () {
+                const { account, chain, transport } = walletClient;
+                const network = {
+                    chainId: chain.id,
+                    name: chain.name,
+                    ensAddress: chain.contracts?.ensRegistry?.address,
+                };
+                const provider = new ethers.BrowserProvider(transport, network);
+                const signer = new ethers.JsonRpcSigner(provider, account.address);
+                const contract = new ethers.Contract(address, abi, signer);
+                return contract;
+            };
+        } else if (typeof window !== 'undefined' && (window as any).ethereum) {
+            // Fallback for legacy dapps or when wagmi isn't fully initialized but metamask is present
+            // This path is less safe but kept for backward compatibility if needed, 
+            // though walletClient should be preferred.
+            const provider = new ethers.BrowserProvider((window as any).ethereum);
             writeContractFunc = async function () {
                 const signer = await provider.getSigner();
                 const contract = new ethers.Contract(address, abi, signer);

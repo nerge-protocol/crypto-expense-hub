@@ -19,7 +19,7 @@ import { useEscrow } from '@/hooks/useEscrow';
 import { buildAndSignPayment } from '@/lib/paymentHelper';
 import { API_URL } from '@/lib/api';
 import { ChainType } from '@/hooks/useWallet';
-import { useAccount, useSwitchChain } from 'wagmi';
+import { useAccount, useSwitchChain, useWalletClient } from 'wagmi';
 
 interface PaymentData {
     merchantName: string;
@@ -56,6 +56,7 @@ const Checkout = () => {
     const { open } = useAppKit();
     const { address, isConnected, chainId: currentChainId } = useAccount();
     const { switchChainAsync } = useSwitchChain();
+    const { data: walletClient } = useWalletClient();
     const { disconnect } = useDisconnect();
     const tokenTransfer = useTokenTransfer();
 
@@ -118,13 +119,20 @@ const Checkout = () => {
                 });
 
                 // Auto-select chain and token for merchant-initiated payments
-                if (data.payment.chain) {
+                // ONLY if wallet is not already connected. If connected, we respect current wallet chain.
+                if (data.payment.chain && !isConnected) {
                     const chain = chains.find(c => c.id === data.payment.chain);
                     if (chain) {
                         setSelectedChain(chain);
                         setSelectedToken(data.paymentIntent?.tokenSymbol || 'USDT');
-                        setStep('wallet-connect'); // Go straight to wallet connect or payment if connected
                     }
+                }
+
+                // If connected, move beyond initial step
+                if (isConnected) {
+                    setStep('payment');
+                } else if (data.payment.chain) {
+                    setStep('wallet-connect');
                 }
 
             } catch (err: any) {
@@ -315,6 +323,24 @@ const Checkout = () => {
         }
     }, [isConnected, step]);
 
+    // Sync selected chain with wallet chain on connection/refresh
+    useEffect(() => {
+        if (isConnected && currentChainId) {
+            const walletChain = chains.find(c => {
+                const config = getEnabledChains().find(ec => ec.id === c.id);
+                if (!config) return false;
+                const chainIdVal = isTestnet() ? config.chainId.testnet : config.chainId.mainnet;
+                return chainIdVal === currentChainId;
+            });
+
+            // Only switch if we found a matching supported chain and it's different from current
+            if (walletChain && (!selectedChain || walletChain.id !== selectedChain.id)) {
+                console.log("🔄 Syncing UI to wallet chain:", walletChain.id);
+                setSelectedChain(walletChain);
+            }
+        }
+    }, [isConnected, currentChainId, chains]); // Removed selectedChain from deps to avoid ping-pong
+
     const submitPayment = async (params: {
         amount: string;
         chain: ChainType;
@@ -411,6 +437,7 @@ const Checkout = () => {
                 toAddress: contractByChain.escrowManager,
                 reference: pData.payment.onchainReference,
                 category: params.category,
+                walletClient
             });
 
             if (!result.success || !result.txHash) {

@@ -21,6 +21,7 @@ export interface PaymentParams {
     toAddress: string; // Usually your escrow contract
     reference: string; // Payment intent ID
     category: string;
+    walletClient?: any; // WalletClient from wagmi/viem
 }
 
 /**
@@ -56,7 +57,7 @@ export async function buildAndSignPayment(
         }
 
         // Step 3: Sign and send the transaction
-        const txHash = await signAndSendTransaction(tx, chain);
+        const txHash = await signAndSendTransaction(tx, chain, params.walletClient);
 
         if (!txHash) {
             return {
@@ -250,7 +251,8 @@ async function ensureTokenApproval(params: PaymentParams): Promise<boolean> {
             tokenAddress,
             fromAddress,
             escrowAddress,
-            chain
+            chain,
+            params.walletClient
         );
 
         console.log('Current allowance:', currentAllowance.toString());
@@ -268,7 +270,8 @@ async function ensureTokenApproval(params: PaymentParams): Promise<boolean> {
             escrowAddress,
             amount,
             fromAddress,
-            chain
+            chain,
+            params.walletClient
         );
 
         if (!approved) {
@@ -279,7 +282,7 @@ async function ensureTokenApproval(params: PaymentParams): Promise<boolean> {
         console.log('✅ Token approved successfully');
 
         // Wait for approval transaction to be mined
-        await waitForTransactionConfirmation(approved, chain);
+        await waitForTransactionConfirmation(approved, chain, 60, params.walletClient);
 
         return true;
     } catch (error) {
@@ -295,11 +298,14 @@ async function checkAllowance(
     tokenAddress: string,
     ownerAddress: string,
     spenderAddress: string,
-    chain: SupportedChain
+    chain: SupportedChain,
+    walletClient?: any
 ): Promise<bigint> {
-    if (!window.ethereum) {
+    if (!walletClient && !window.ethereum) {
         throw new Error('Wallet not available');
     }
+
+    const provider = walletClient || (window as any).ethereum;
 
     try {
         const data = encodeFunctionData({
@@ -308,7 +314,7 @@ async function checkAllowance(
             args: [ownerAddress as `0x${string}`, spenderAddress as `0x${string}`],
         });
 
-        const result = await (window.ethereum as any).request({
+        const result = await provider.request({
             method: 'eth_call',
             params: [
                 {
@@ -338,15 +344,18 @@ async function approveToken(
     spenderAddress: string,
     amount: string,
     fromAddress: string,
-    chain: SupportedChain
+    chain: SupportedChain,
+    walletClient?: any
 ): Promise<string | null> {
-    if (!window.ethereum) {
+    if (!walletClient && !window.ethereum) {
         throw new Error('Wallet not available');
     }
 
+    const provider = walletClient || (window as any).ethereum;
+
     try {
         const expectedChainId = getCurrentChainId(chain);
-        const currentChainIdHex = await window.ethereum.request({ method: 'eth_chainId' });
+        const currentChainIdHex = await provider.request({ method: 'eth_chainId' });
         const currentChainId = parseInt(currentChainIdHex, 16);
 
         if (expectedChainId !== currentChainId) {
@@ -369,7 +378,7 @@ async function approveToken(
             value: '0x0',
         };
 
-        const txHash = await window.ethereum.request({
+        const txHash = await provider.request({
             method: 'eth_sendTransaction',
             params: [tx],
         });
@@ -389,7 +398,8 @@ async function approveToken(
  */
 async function signAndSendTransaction(
     tx: any,
-    chain: SupportedChain
+    chain: SupportedChain,
+    walletClient?: any
 ): Promise<string | null> {
     console.log('✍️ Requesting signature for transaction...', {
         tx,
@@ -399,19 +409,21 @@ async function signAndSendTransaction(
     try {
         // For EVM chains
         if (['ethereum', 'arbitrum', 'base'].includes(chain)) {
-            if (!window.ethereum) {
+            if (!walletClient && !window.ethereum) {
                 throw new Error('Wallet not available');
             }
 
+            const provider = walletClient || (window as any).ethereum;
+
             const expectedChainId = getCurrentChainId(chain);
-            const currentChainIdHex = await window.ethereum.request({ method: 'eth_chainId' });
+            const currentChainIdHex = await provider.request({ method: 'eth_chainId' });
             const currentChainId = parseInt(currentChainIdHex, 16);
 
             if (expectedChainId !== currentChainId) {
                 throw new Error(`Wrong network: Wallet is on chain ${currentChainId}, but ${chain} (chain ${expectedChainId}) is required.`);
             }
 
-            const txHash = await (window.ethereum as any).request({
+            const txHash = await provider.request({
                 method: 'eth_sendTransaction',
                 params: [tx],
             });
@@ -451,16 +463,19 @@ async function signAndSendTransaction(
 async function waitForTransactionConfirmation(
     txHash: string,
     chain: SupportedChain,
-    maxWaitSeconds: number = 60
+    maxWaitSeconds: number = 60,
+    walletClient?: any
 ): Promise<void> {
     console.log('⏳ Waiting for transaction confirmation...', txHash);
+
+    const provider = walletClient || (window as any).ethereum;
 
     const startTime = Date.now();
     const maxWaitMs = maxWaitSeconds * 1000;
 
     while (Date.now() - startTime < maxWaitMs) {
         try {
-            const receipt = await window.ethereum.request({
+            const receipt = await provider.request({
                 method: 'eth_getTransactionReceipt',
                 params: [txHash],
             });
@@ -512,9 +527,3 @@ export function getTokenInfo(
 /**
  * TypeScript declarations for window objects
  */
-declare global {
-    interface Window {
-        ethereum?: any;
-        tronWeb?: any;
-    }
-}

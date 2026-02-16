@@ -4,6 +4,7 @@
 
 import { useState } from 'react';
 import { ethers } from 'ethers';
+import { useWalletClient } from 'wagmi';
 import { useContract } from './useContract';
 import { CONTRACTS, ABIS, getContractByName } from '../lib/contracts';
 
@@ -16,6 +17,7 @@ declare global {
 export function useEscrow() {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const { data: walletClient } = useWalletClient();
     const escrowManagerResp = useContract('escrowManager');
     const { writeContractFunc } = escrowManagerResp;
 
@@ -184,8 +186,24 @@ export function useEscrow() {
      */
     const approveToken = async (tokenAddress: string, amount: string) => {
         const escrow = await writeContractFunc();
-        const provider = new ethers.BrowserProvider(window.ethereum);
-        const signer = await provider.getSigner();
+
+        let signer;
+        if (walletClient) {
+            const { account, chain, transport } = walletClient;
+            const network = {
+                chainId: chain.id,
+                name: chain.name,
+                ensAddress: chain.contracts?.ensRegistry?.address,
+            };
+            const provider = new ethers.BrowserProvider(transport, network);
+            signer = new ethers.JsonRpcSigner(provider, account.address);
+        } else if (typeof window !== 'undefined' && (window as any).ethereum) {
+            const provider = new ethers.BrowserProvider((window as any).ethereum);
+            signer = await provider.getSigner();
+        } else {
+            throw new Error("Wallet not connected");
+        }
+
         const token = new ethers.Contract(tokenAddress, ABIS.erc20, signer);
 
         // Check current allowance
